@@ -1,0 +1,19 @@
+{
+  "name": "@campushire/utils",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "npm run build --prefix ../types && tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@campushire/types": "1.0.0",
+    "date-fns": "^3.6.0",
+    "nanoid": "3.3.7"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

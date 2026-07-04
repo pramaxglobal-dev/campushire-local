@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "CampusHire",
+    "slug": "campushire",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "campushire",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#1B3A6B"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "in.campushire.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1B3A6B"
+      },
+      "package": "in.campushire.app"
+    },
+    "plugins": ["expo-router", "expo-secure-store", "expo-notifications"]
+  }
+}

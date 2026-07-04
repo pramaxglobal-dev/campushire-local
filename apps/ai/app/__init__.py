@@ -1,0 +1,1 @@
+"""CampusHire AI service package."""

@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+apps/*/node_modules/
+packages/*/node_modules/
+
+# Build output
+dist/
+.next/
+coverage/
+turbo/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+apps/ai/.env
+apps/ai/.env.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.turbo/
+.vercel/
+# Python
+__pycache__/
+*.py[cod]
+
+# TypeScript
+*.tsbuildinfo
+
+# Python virtual env
+.venv/
+venv/

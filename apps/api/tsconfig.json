@@ -1,0 +1,27 @@
+{
+  "extends": "@campushire/config/tsconfig/node.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "noImplicitAny": false,
+    "strict": false,
+    "skipLibCheck": true,
+    "noEmitOnError": false,
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "paths": {
+      "@campushire/types": ["../../packages/types/dist"],
+      "@campushire/types/*": ["../../packages/types/dist/*"],
+      "@campushire/utils": ["../../packages/utils/dist"],
+      "@campushire/utils/*": ["../../packages/utils/dist/*"]
+    },
+    "baseUrl": "."
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "extends": "../config/tsconfig/node.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "baseUrl": ".",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "declaration": true,
+    "paths": {
+      "@campushire/types": ["../types/dist"],
+      "@campushire/types/*": ["../types/dist/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

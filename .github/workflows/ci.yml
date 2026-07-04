@@ -1,0 +1,125 @@
+name: CampusHire CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://campushire:testpassword@localhost:5432/campushire_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npx prisma validate --schema=./prisma/schema.prisma
+      - run: npx tsc --noEmit -p packages/types/tsconfig.json
+      - run: npx tsc --noEmit -p packages/utils/tsconfig.json
+      - run: npx tsc --noEmit -p packages/ui/tsconfig.json
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    needs: validate
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: campushire
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: campushire_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://campushire:testpassword@localhost:5432/campushire_test
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: test-access-secret-min-32-characters-long
+      JWT_REFRESH_SECRET: test-refresh-secret-min-32-characters-long
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      NODE_ENV: test
+      API_PORT: 4000
+      CORS_ORIGIN: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run db:push
+      - run: npx tsc --noEmit -p apps/api/tsconfig.json
+      - name: Lint
+        run: npm run lint --workspace=@campushire/api
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    needs: validate
+    env:
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npx tsc --noEmit -p apps/web/tsconfig.json
+      - run: npm run build --workspace=@campushire/web
+      - name: Lint
+        run: npm run lint --workspace=@campushire/web
+
+  ai-service:
+    name: AI Service
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r apps/ai/requirements.txt
+      - name: Type check
+        run: cd apps/ai && python -m mypy app/ --ignore-missing-imports
+      - name: Lint
+        run: cd apps/ai && python -m flake8 app/ --max-line-length=120
+      - name: Test imports
+        run: cd apps/ai && python -c "from app.main import app; print('OK')"
+
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [backend, frontend, ai-service]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build -t campushire-api:${{ github.sha }} -f apps/api/Dockerfile .
+      - name: Build Web image
+        run: docker build -t campushire-web:${{ github.sha }} -f apps/web/Dockerfile .
+      - name: Build AI image
+        run: docker build -t campushire-ai:${{ github.sha }} -f apps/ai/Dockerfile .

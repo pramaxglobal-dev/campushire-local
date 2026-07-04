@@ -1,0 +1,35 @@
+# 01 Vision To Code Mapping
+
+PRD baseline used for this mapping:
+- User-provided CampusHire PRD checklist in this audit request
+- No separate in-repo PRD markdown file was found
+
+Evidence:
+- Workspace scan (no README/PRD docs at repo root)
+- apps/api/src/modules/*
+- apps/web/src/app/*
+
+| PRD Feature | Expected Behavior | Current Implementation | Status | File Paths | Gap | Recommended Phase |
+|---|---|---|---|---|---|---|
+| Super Admin | Manage users, approvals, platform controls, flags, analytics | Admin dashboard + admin routes exist; analytics loaded with fallback empty structures on failure | Partial | apps/web/src/app/(dashboard)/dashboard/admin/page.tsx; apps/api/src/modules/admin/admin.routes.ts; apps/api/src/modules/admin/admin.service.ts | Reliability and validation hardening still needed | Phase 3-4 |
+| College Admin | Manage invites, connections, events, college analytics | End-to-end UI + routes exist | Working | apps/web/src/app/(dashboard)/dashboard/college/page.tsx; apps/api/src/modules/invites/*; apps/api/src/modules/connections/*; apps/api/src/modules/events/* | Needs UAT depth and tenant isolation checks | Phase 4 |
+| Student | Job feed, apply, track status, interviews, profile | Strong coverage across jobs/applications/interviews/profile | Working | apps/web/src/app/(dashboard)/dashboard/student/page.tsx; apps/web/src/app/(dashboard)/dashboard/jobs/page.tsx; apps/api/src/modules/jobs/*; apps/api/src/modules/applications/* | Needs full manual regression and mobile parity checks | Phase 4 |
+| Job Seeker | Similar to student flow with role-specific profile | Reuses student-oriented dashboard/flows with job-seeker profile branches | Partial | apps/web/src/lib/utils/routes.ts; apps/web/src/app/onboarding/page.tsx; apps/api/src/modules/users/users.service.ts | Dedicated job-seeker UX/analytics depth is limited | Phase 4 |
+| Corporate Recruiter | Post jobs, ATS, interview scheduling, pipeline | Implemented with recruiter dashboard + ATS + interviews | Working | apps/web/src/app/(dashboard)/dashboard/recruiter/page.tsx; apps/web/src/app/(dashboard)/dashboard/ats/[jobId]/page.tsx; apps/api/src/modules/jobs/*; apps/api/src/modules/ats/*; apps/api/src/modules/interviews/* | Needs production hardening and deeper test coverage | Phase 4 |
+| Freelance Recruiter | Referral links, referral status, invoices | Implemented but business rules/payout lifecycle confidence is moderate | Partial | apps/web/src/app/(dashboard)/dashboard/freelance/page.tsx; apps/api/src/modules/freelance/* | Needs billing-grade validation and reconciliation tests | Phase 5-6 |
+| Vendor | Service requests, completion, ratings | UI + backend exist | Partial | apps/web/src/app/(dashboard)/dashboard/vendor/page.tsx; apps/api/src/modules/vendors/* | Multi-tenant and audit logging confidence needs manual verification | Phase 5 |
+| Training Partner | Course create/publish and partner stats | Implemented with partner dashboard + course routes | Partial | apps/web/src/app/(dashboard)/dashboard/training/page.tsx; apps/api/src/modules/training/* | Revenue/payment dependency and partner-only security checks required | Phase 5 |
+| Auth | Register/login/refresh/logout/me, OAuth, verification, reset | Broadly implemented and wired in web client | Working | apps/api/src/modules/auth/*; apps/web/src/components/auth/*; apps/web/src/lib/store/auth.store.ts | Remember-me is UI-only; more token/session policy controls needed | Phase 2 |
+| Role dashboards | Role landing pages and protected routing | Implemented for all major roles | Partial | apps/web/src/app/(dashboard)/dashboard/*; apps/web/middleware.ts; apps/web/src/components/auth/ProtectedRoute.tsx | Some pages use static fallback visuals; wrappers duplicate paths | Phase 3 |
+| Jobs | Listing, detail, create/edit, save, approval | Implemented end-to-end | Working | apps/web/src/app/(dashboard)/dashboard/jobs/*; apps/api/src/modules/jobs/* | Approval + moderation workflows need UAT | Phase 4 |
+| Applications | Apply, list, detail, withdraw, notes | Implemented | Working | apps/web/src/app/(dashboard)/dashboard/applications/*; apps/api/src/modules/applications/* | Verify edge states and race conditions in UAT | Phase 4 |
+| ATS | Kanban, move/bulk move, shortlist/reject, notes, resume download | Implemented | Working | apps/web/src/app/(dashboard)/dashboard/ats/*; apps/api/src/modules/ats/* | Needs permission + tenant boundary stress tests | Phase 4 |
+| Interview scheduling | Schedule/confirm/outcome | Implemented | Working | apps/web/src/app/(dashboard)/dashboard/interviews/page.tsx; apps/api/src/modules/interviews/* | Timezone and reminder execution needs manual verification | Phase 5 |
+| Events/calendar | List/create/register/cancel | Implemented | Working | apps/web/src/app/(dashboard)/dashboard/events/*; apps/api/src/modules/events/* | Calendar integrations are basic; no external calendar sync | Phase 5 |
+| Messaging | Thread list, send/read/upload, socket updates | Implemented | Working | apps/web/src/app/(dashboard)/dashboard/chat/page.tsx; apps/api/src/modules/chat/*; apps/api/src/lib/socket.ts | Socket scaling and auth expiry handling need soak testing | Phase 5 |
+| Documents | Upload/share/verify request/delete | Implemented | Working | apps/web/src/app/(dashboard)/dashboard/documents/page.tsx; apps/api/src/modules/documents/* | Vendor verification SLAs/workflow auditing needed | Phase 5 |
+| Notifications | In-app, email, whatsapp, push preferences | Implemented with optional external providers | Working | apps/web/src/app/(dashboard)/dashboard/notifications/page.tsx; apps/api/src/modules/notifications/*; apps/api/src/lib/notification.ts | External channel delivery depends on env setup | Phase 5 |
+| White label | Tenant branding by host/public experience | Config UI/backend exists but public config fetch is auth-protected | Broken | apps/web/src/components/layout/ThemeProvider.tsx; apps/web/middleware.ts; apps/api/src/modules/whitelabel/whitelabel.routes.ts | Anonymous host resolution mismatch blocks intended public branding behavior | Phase 2-3 |
+| Billing | Payment orders/verification and revenue updates | Course payment flow only; no full platform billing engine | Partial | apps/api/src/modules/payments/*; apps/api/src/lib/razorpay.ts; apps/web/src/lib/api/payments.api.ts | Limited scope; broader billing remains out of locked MVP | Out of MVP / Phase 6+ |
+| AI matching | Match scoring and recommendations | AI service + API integration exists, env and service-key dependent | Partial | apps/api/src/lib/ai.ts; apps/ai/app/main.py; apps/ai/app/routers/matching.py | Requires AI service uptime, data quality, and model validation | Out of MVP core / Phase 6+ |
+| Reports/analytics | Role and platform analytics | Many analytics endpoints and dashboard cards exist | Partial | apps/api/src/modules/analytics/*; apps/web/src/lib/api/analytics.api.ts; apps/web/src/app/(dashboard)/dashboard/* | Accuracy/performance and consistency need manual verification | Phase 3-5 |
