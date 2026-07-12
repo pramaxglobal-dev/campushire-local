@@ -10,6 +10,7 @@ import { requestLogger } from "./middleware/request-logger";
 import { tenantResolver } from "./middleware/tenant-resolver";
 import { apiRateLimiter } from "./middleware/rate-limit";
 import { errorHandler } from "./middleware/error-handler";
+import { csrfProtection } from "./middleware/csrf";
 import { authRoutes } from "./modules/auth/auth.routes";
 import { usersRoutes } from "./modules/users/users.routes";
 import { tenantsRoutes } from "./modules/tenants/tenants.routes";
@@ -84,6 +85,7 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 app.use(requestLogger);
 app.use(tenantResolver);
 app.use("/api", apiRateLimiter);
+app.use("/api", csrfProtection);
 app.use(passport.initialize());
 
 app.use("/api/auth", authRoutes);

@@ -11,6 +11,7 @@ import { useAuthStore } from "@/lib/store/auth.store";
 import { forgotPassword } from "@/lib/api/auth.api";
 import { getPreferences, updatePreferences } from "@/lib/api/notifications.api";
 import { updateProfile } from "@/lib/api/users.api";
+import { deactivateAccount } from "@/lib/api/users.api";
 
 interface PreferenceCell {
   type: NotificationType;
@@ -50,6 +51,8 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [visibility, setVisibility] = useState<ProfileVisibility>("COLLEGE_ONLY");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deactivationPassword, setDeactivationPassword] = useState("");
+  const [deactivating, setDeactivating] = useState(false);
 
   useEffect(() => {
     if (user?.profileVisibility) {
@@ -278,7 +281,7 @@ export default function SettingsPage() {
             <h2 className="text-lg font-semibold">Danger Zone</h2>
           </div>
           <p className="text-sm text-slate-600">
-            You can sign out now and contact support to request account deactivation.
+            Deactivation immediately disables sign-in and revokes every active session. Contact support to request later restoration.
           </p>
           <Button variant="destructive" className="mt-4" onClick={() => setConfirmOpen(true)}>
             Deactivate Account
@@ -289,15 +292,32 @@ export default function SettingsPage() {
       <ConfirmDialog
         open={confirmOpen}
         title="Deactivate account"
-        description="This action signs you out now. Contact support for full deactivation processing."
-        confirmLabel="Sign out"
+        description="This disables your account and revokes all sessions. Enter your current password below, then confirm."
+        confirmLabel={deactivating ? "Deactivating..." : "Deactivate account"}
         confirmVariant="destructive"
         onCancel={() => setConfirmOpen(false)}
         onConfirm={() => {
-          setConfirmOpen(false);
-          void logout();
+          if (deactivating) return;
+          setDeactivating(true);
+          void deactivateAccount(deactivationPassword || undefined)
+            .then(async () => {
+              setConfirmOpen(false);
+              await logout();
+            })
+            .catch((deactivationError) => {
+              setError(deactivationError instanceof Error ? deactivationError.message : "Unable to deactivate account.");
+            })
+            .finally(() => setDeactivating(false));
         }}
-      />
+      >
+        <Input
+          label="Current password"
+          type="password"
+          autoComplete="current-password"
+          value={deactivationPassword}
+          onChange={(event) => setDeactivationPassword(event.target.value)}
+        />
+      </ConfirmDialog>
     </div>
   );
 }

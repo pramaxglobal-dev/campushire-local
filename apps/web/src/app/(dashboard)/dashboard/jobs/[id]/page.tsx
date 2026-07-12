@@ -87,6 +87,13 @@ export default function JobDetailPage() {
 
   const submitApplication = async () => {
     if (!job) return;
+    const missingRequired = job.screeningQuestions
+      .filter((question) => question.isRequired)
+      .filter((question) => !answers[question.question]?.trim());
+    if (missingRequired.length > 0) {
+      toast.error(`Answer all required screening questions (${missingRequired.length} remaining).`);
+      return;
+    }
     setSubmitting(true);
     try {
       await applyToJob(job.id, {

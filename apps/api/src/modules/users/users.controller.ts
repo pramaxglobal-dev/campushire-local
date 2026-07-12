@@ -1,7 +1,8 @@
 import type { NextFunction, Request, Response } from "express";
 import { UserRole } from "@campushire/types";
-import { ActivityQuerySchema, NotificationPreferenceSchema, UpdateProfileSchema } from "./users.schema";
+import { ActivityQuerySchema, DeactivateAccountSchema, NotificationPreferenceSchema, UpdateProfileSchema } from "./users.schema";
 import {
+  deactivateAccount,
   getActivityLog,
   getProfile,
   updateNotificationPreferences,
@@ -127,6 +128,21 @@ export const getActivityLogController = async (
     const result = await getActivityLog(actor.userId, actor.tenantId, query.page, query.limit);
 
     res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deactivateAccountController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const actor = requireAuthenticatedUser(req);
+    const dto = DeactivateAccountSchema.parse(req.body);
+    await deactivateAccount(actor.userId, actor.tenantId, dto);
+    res.status(200).json({ success: true, data: { deactivated: true }, error: null });
   } catch (error) {
     next(error);
   }

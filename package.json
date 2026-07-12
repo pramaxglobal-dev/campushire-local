@@ -18,16 +18,17 @@
     "db:studio": "prisma studio --schema=./prisma/schema.prisma"
   },
   "devDependencies": {
-    "turbo": "^2.0.0",
-    "typescript": "^5.4.0",
+    "@types/bcrypt": "^5.0.2",
+    "@types/node": "^20.0.0",
     "prisma": "^5.14.0",
     "ts-node": "^10.9.2",
-    "@types/bcrypt": "^5.0.2",
-    "@types/node": "^20.0.0"
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
   },
   "dependencies": {
     "@prisma/client": "^5.14.0",
     "bcrypt": "^5.1.1",
+    "dotenv": "^17.4.2",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },

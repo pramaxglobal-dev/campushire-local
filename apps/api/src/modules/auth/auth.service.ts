@@ -218,8 +218,10 @@ const validateStudentInvite = async (
 const createRoleProfileSetup = async (
   tx: TransactionClient,
   user: Pick<User, "id" | "role" | "tenantId" | "firstName" | "lastName">,
-  inviteContext?: InviteValidationResult
+  inviteContext?: InviteValidationResult,
+  requestedOrganizationName?: string
 ): Promise<void> => {
+  const organizationName = requestedOrganizationName?.trim();
   if (user.role === UserRole.STUDENT) {
     if (!user.tenantId || !inviteContext?.collegeProfileId) {
       throw new ServiceError("Student registration requires a valid college invite.", 400);
@@ -253,7 +255,7 @@ const createRoleProfileSetup = async (
       throw new ServiceError("Corporate recruiter requires a tenant.", 400);
     }
 
-    const companyName = `${user.firstName} ${user.lastName} Technologies`.trim();
+    const companyName = organizationName || `${user.firstName} ${user.lastName} Technologies`.trim();
     const companySlug = `${generateSlug(companyName)}-${nanoid(6).toLowerCase()}`;
 
     await tx.recruiterProfile.create({
@@ -278,7 +280,7 @@ const createRoleProfileSetup = async (
       data: {
         userId: user.id,
         tenantId: user.tenantId,
-        agencyName: `${user.firstName} ${user.lastName} Recruiting`
+        agencyName: organizationName || `${user.firstName} ${user.lastName} Recruiting`
       }
     });
     return;
@@ -294,7 +296,7 @@ const createRoleProfileSetup = async (
         userId: user.id,
         tenantId: user.tenantId,
         vendorType: VendorType.OTHER,
-        businessName: `${user.firstName} ${user.lastName} Services`,
+        businessName: organizationName || `${user.firstName} ${user.lastName} Services`,
         pricingModel: PricingModel.CUSTOM,
         isActive: true,
         isVerified: false
@@ -312,7 +314,7 @@ const createRoleProfileSetup = async (
       data: {
         userId: user.id,
         tenantId: user.tenantId,
-        organizationName: `${user.firstName} ${user.lastName} Academy`
+        organizationName: organizationName || `${user.firstName} ${user.lastName} Academy`
       }
     });
     return;
@@ -323,7 +325,7 @@ const createRoleProfileSetup = async (
       throw new ServiceError("College admin requires a tenant.", 400);
     }
 
-    const collegeName = `${user.firstName} ${user.lastName} College`.trim();
+    const collegeName = organizationName || `${user.firstName} ${user.lastName} College`.trim();
     const collegeSlug = `${generateSlug(collegeName)}-${nanoid(6).toLowerCase()}`;
 
     await tx.collegeProfile.create({
@@ -434,7 +436,7 @@ export const register = async (dto: RegisterDto): Promise<{ user: SafeUser; mess
       }
     });
 
-    await createRoleProfileSetup(tx, user, inviteContext);
+    await createRoleProfileSetup(tx, user, inviteContext, dto.organizationName);
 
     if (inviteContext) {
       await tx.invite.update({

@@ -9,7 +9,9 @@ import {
   getPendingApprovalsController,
   getPlatformStatsController,
   getUserDetailController,
+  listAuditLogsController,
   listFeatureFlagsController,
+  listPlatformSettingsController,
   listUsersController,
   rejectUserController,
   suspendUserController,
@@ -47,6 +49,8 @@ router.post(
 router.post("/users/:id/unsuspend", validate({ params: UserIdParamSchema }), unsuspendUserController);
 router.get("/stats", getPlatformStatsController);
 router.get("/pending-approvals", getPendingApprovalsController);
+router.get("/audit-logs", listAuditLogsController);
+router.get("/settings", listPlatformSettingsController);
 router.put(
   "/settings/:key",
   validate({ params: SettingKeyParamSchema, body: UpdatePlatformSettingSchema }),

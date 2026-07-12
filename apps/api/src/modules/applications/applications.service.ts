@@ -37,6 +37,21 @@ export type ApplicationCard = {
 
 type ScreeningAnswersMap = Record<string, string>;
 
+type ScreeningQuestion = {
+  question: string;
+  isRequired: boolean;
+};
+
+const parseRequiredScreeningQuestions = (value: Prisma.JsonValue | null): ScreeningQuestion[] => {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const record = entry as Record<string, unknown>;
+    if (typeof record.question !== "string" || record.question.trim().length === 0) return [];
+    return [{ question: record.question.trim(), isRequired: record.isRequired !== false }];
+  });
+};
+
 const parseJobTargetCollegeIds = (value: Prisma.JsonValue | null): string[] => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return [];
@@ -122,6 +137,18 @@ export const applyToJob = async (
     }
   }
 
+  const answers = dto.answers ?? {};
+  const missingRequiredAnswers = parseRequiredScreeningQuestions(job.screeningQuestions)
+    .filter((question) => question.isRequired)
+    .filter((question) => !answers[question.question]?.trim())
+    .map((question) => question.question);
+  if (missingRequiredAnswers.length > 0) {
+    throw new ServiceError(
+      `Required screening answers missing: ${missingRequiredAnswers.join(", ")}`,
+      400
+    );
+  }
+
   const application = await prisma.application.create({
     data: {
       tenantId: job.tenantId,
@@ -130,7 +157,7 @@ export const applyToJob = async (
       status: ApplicationStatus.APPLIED,
       source: "job_feed",
       coverLetter: dto.coverNote ? sanitizeInput(dto.coverNote) : null,
-      screeningAnswers: asInputJson(dto.answers ?? {})
+      screeningAnswers: asInputJson(answers)
     }
   });
 

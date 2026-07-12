@@ -6,6 +6,7 @@ import { requireRole } from "../../middleware/rbac";
 import {
   deleteDocumentController,
   getMyDocumentsController,
+  getMyDocumentVerificationsController,
   getSharedDocumentsController,
   requestVerificationController,
   toggleShareWithRecruitersController,
@@ -23,6 +24,7 @@ const upload = multer({
 
 router.post("/upload", authenticateJWT, upload.single("file"), uploadDocumentController);
 router.get("/", authenticateJWT, getMyDocumentsController);
+router.get("/verifications", authenticateJWT, getMyDocumentVerificationsController);
 router.delete("/:id", authenticateJWT, deleteDocumentController);
 router.patch("/:id/share", authenticateJWT, toggleShareWithRecruitersController);
 router.post("/:id/verify", authenticateJWT, requestVerificationController);

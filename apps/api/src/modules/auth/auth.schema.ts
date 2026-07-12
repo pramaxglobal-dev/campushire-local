@@ -17,7 +17,8 @@ export const RegisterSchema = z.object({
   lastName: z.string().trim().min(1),
   role: z.nativeEnum(UserRole),
   inviteCode: z.string().trim().min(1).optional(),
-  phone: z.string().trim().min(10).max(20).optional()
+  phone: z.string().trim().min(10).max(20).optional(),
+  organizationName: z.string().trim().min(2).max(200).optional()
 });
 
 export const LoginSchema = z.object({

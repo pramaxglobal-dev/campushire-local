@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { rateLimit } from "express-rate-limit";
 import { RedisStore } from "rate-limit-redis";
 import { redis } from "../lib/redis";
+import { logger } from "../lib/logger";
 
 interface RateLimitRequest extends Request {
   rateLimit?: {
@@ -24,14 +25,26 @@ const buildRetryResponse = (req: RateLimitRequest, res: Response): void => {
   });
 };
 
-const createRedisStore = (prefix: string): RedisStore =>
-  new RedisStore({
-    prefix,
-    sendCommand: (...args: string[]): Promise<never> => {
-      const command = args[0] ?? "PING";
-      return redis.call(command, ...args.slice(1)) as Promise<never>;
-    }
-  });
+const createRedisStore = (prefix: string): RedisStore | undefined => {
+  // Only use Redis store if Redis is connected
+  if (redis.status !== "ready") {
+    logger.warn(`Redis not ready (status: ${redis.status}), rate limiter will use memory store`);
+    return undefined;
+  }
+
+  try {
+    return new RedisStore({
+      prefix,
+      sendCommand: (...args: string[]): Promise<never> => {
+        const command = args[0] ?? "PING";
+        return redis.call(command, ...args.slice(1)) as Promise<never>;
+      }
+    });
+  } catch (error) {
+    logger.error({ error }, "Failed to create Redis store for rate limiter, falling back to memory");
+    return undefined;
+  }
+};
 
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

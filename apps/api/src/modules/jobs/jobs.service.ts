@@ -727,6 +727,11 @@ const applyRoleBasedWhere = async (
     return { where, viewerRole: viewer.role };
   }
 
+  if (viewer.role === UserRole.SUPER_ADMIN) {
+    where.status = filters.status ?? JobStatus.ACTIVE;
+    return { where, viewerRole: viewer.role };
+  }
+
   where.status = JobStatus.ACTIVE;
   return { where, viewerRole: viewer.role };
 };

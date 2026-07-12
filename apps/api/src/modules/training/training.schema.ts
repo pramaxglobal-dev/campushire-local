@@ -34,6 +34,10 @@ export const UpdateEnrollmentProgressSchema = z.object({
   progressPct: z.coerce.number().int().min(0).max(100)
 });
 
+export const PartnerEnrollmentQuerySchema = z.object({
+  courseId: z.string().trim().min(1).optional()
+});
+
 export type CourseFilters = z.infer<typeof CourseFiltersSchema>;
 export type CreateCourseDto = z.infer<typeof CreateCourseSchema>;
 export type UpdateCourseDto = z.infer<typeof UpdateCourseSchema>;

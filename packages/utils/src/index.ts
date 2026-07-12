@@ -75,28 +75,77 @@ export const getRoleLabel = (role: UserRole): string => {
   return labels[role];
 };
 
-export const getStatusColor = (status: string): string => {
+export const getStatusColor = (status: string | null | undefined): string => {
+  // Guard: never crash on undefined/null/non-string values.
+  if (!status || typeof status !== "string") {
+    return "bg-slate-100 text-slate-600";
+  }
+
   const normalized = status.toLowerCase();
+
   const colorMap: Record<string, string> = {
-    active: "bg-emerald-100 text-emerald-800",
-    approved: "bg-emerald-100 text-emerald-800",
-    completed: "bg-emerald-100 text-emerald-800",
-    hired: "bg-emerald-100 text-emerald-800",
-    pending: "bg-amber-100 text-amber-800",
+    // ── ApplicationStatus ──────────────────────────────────────────────────
+    applied: "bg-sky-100 text-sky-800",
     screening: "bg-amber-100 text-amber-800",
-    on_hold: "bg-amber-100 text-amber-800",
-    paused: "bg-orange-100 text-orange-800",
-    draft: "bg-slate-100 text-slate-800",
-    rejected: "bg-rose-100 text-rose-800",
-    cancelled: "bg-rose-100 text-rose-800",
-    failed: "bg-rose-100 text-rose-800",
-    offered: "bg-sky-100 text-sky-800",
     shortlisted: "bg-sky-100 text-sky-800",
     interview_r1: "bg-indigo-100 text-indigo-800",
     interview_r2: "bg-indigo-100 text-indigo-800",
-    interview_r3: "bg-indigo-100 text-indigo-800"
+    interview_r3: "bg-indigo-100 text-indigo-800",
+    offered: "bg-violet-100 text-violet-800",
+    accepted: "bg-emerald-100 text-emerald-800",
+    hired: "bg-emerald-100 text-emerald-800",
+    rejected: "bg-rose-100 text-rose-800",
+    withdrawn: "bg-slate-100 text-slate-600",
+    on_hold: "bg-amber-100 text-amber-800",
+
+    // ── JobStatus ──────────────────────────────────────────────────────────
+    draft: "bg-slate-100 text-slate-600",
+    pending_approval: "bg-amber-100 text-amber-800",
+    active: "bg-emerald-100 text-emerald-800",
+    paused: "bg-orange-100 text-orange-800",
+    closed: "bg-slate-100 text-slate-600",
+    expired: "bg-rose-100 text-rose-800",
+
+    // ── ConnectionStatus ───────────────────────────────────────────────────
+    pending: "bg-amber-100 text-amber-800",
+    approved: "bg-emerald-100 text-emerald-800",
+    disconnected: "bg-slate-100 text-slate-600",
+
+    // ── ServiceRequestStatus ───────────────────────────────────────────────
+    in_progress: "bg-sky-100 text-sky-800",
+    completed: "bg-emerald-100 text-emerald-800",
+    cancelled: "bg-rose-100 text-rose-800",
+
+    // ── ReferralStatus ─────────────────────────────────────────────────────
+    triggered: "bg-violet-100 text-violet-800",
+    invoiced: "bg-sky-100 text-sky-800",
+    paid: "bg-emerald-100 text-emerald-800",
+    disputed: "bg-orange-100 text-orange-800",
+
+    // ── VerificationStatus ─────────────────────────────────────────────────
+    unverified: "bg-slate-100 text-slate-600",
+    requested: "bg-amber-100 text-amber-800",
+    verified: "bg-emerald-100 text-emerald-800",
+
+    // ── InterviewStatus ────────────────────────────────────────────────────
+    scheduled: "bg-sky-100 text-sky-800",
+    confirmed: "bg-emerald-100 text-emerald-800",
+    rescheduled: "bg-amber-100 text-amber-800",
+
+    // ── EventStatus ────────────────────────────────────────────────────────
+    upcoming: "bg-sky-100 text-sky-800",
+    ongoing: "bg-emerald-100 text-emerald-800",
+
+    // ── InvoiceStatus ──────────────────────────────────────────────────────
+    sent: "bg-sky-100 text-sky-800",
+    overdue: "bg-rose-100 text-rose-800",
+
+    // ── Generic helpers ────────────────────────────────────────────────────
+    failed: "bg-rose-100 text-rose-800",
+    inactive: "bg-slate-100 text-slate-600"
   };
-  return colorMap[normalized] ?? "bg-gray-100 text-gray-800";
+
+  return colorMap[normalized] ?? "bg-slate-100 text-slate-600";
 };
 
 export const validateEmail = (email: string): boolean => {

@@ -521,6 +521,27 @@ export const getPartnerCourses = async (partnerId: string): Promise<Course[]> =>
   });
 };
 
+export const getPartnerEnrollments = async (partnerId: string, courseId?: string) => {
+  const actor = await getUserWithTenant(partnerId);
+  const partner = await getPartnerProfile(actor.id, actor.tenantId);
+  return prisma.courseEnrollment.findMany({
+    where: {
+      ...(courseId ? { courseId } : {}),
+      course: {
+        tenantId: actor.tenantId,
+        trainingPartnerProfileId: partner.id
+      }
+    },
+    include: {
+      user: {
+        select: { id: true, firstName: true, lastName: true, email: true, avatarUrl: true }
+      },
+      course: { select: { id: true, title: true } }
+    },
+    orderBy: { enrolledAt: "desc" }
+  });
+};
+
 export const getPartnerStats = async (partnerId: string): Promise<TrainingStats> => {
   const actor = await getUserWithTenant(partnerId);
   const partner = await getPartnerProfile(actor.id, actor.tenantId);

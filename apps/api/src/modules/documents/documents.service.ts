@@ -259,7 +259,7 @@ export const requestVerification = async (
     throw new ServiceError("Vendor not found.", 404);
   }
 
-  const updatedDocument = await prisma.$transaction(async (tx) => {
+  const verificationRequest = await prisma.$transaction(async (tx) => {
     const updated = await tx.userDocument.update({
       where: { id: document.id },
       data: {
@@ -293,8 +293,9 @@ export const requestVerification = async (
       }
     });
 
-    return updated;
+    return { updated, serviceRequest };
   });
+  const updatedDocument = verificationRequest.updated;
 
   await sendNotification({
     userId: vendor.user.id,
@@ -302,7 +303,7 @@ export const requestVerification = async (
     title: "Document Verification Requested",
     body: "A new document verification request requires your attention.",
     contextType: "SERVICE_REQUEST",
-    contextId: updatedDocument.id,
+    contextId: verificationRequest.serviceRequest.id,
     actionUrl: "/dashboard/vendor",
     channels: [NotificationChannel.IN_APP, NotificationChannel.EMAIL, NotificationChannel.WHATSAPP]
   });
@@ -371,4 +372,17 @@ export const getSharedDocuments = async (
 
   const shared = documents.filter((document) => isSharedWithRecruiters(document.meta));
   return Promise.all(shared.map((document) => withFreshUrl(document)));
+};
+
+export const getMyDocumentVerifications = async (userId: string) => {
+  const actor = await getUserWithTenant(userId);
+  return prisma.documentVerification.findMany({
+    where: { requesterUserId: userId, serviceRequest: { tenantId: actor.tenantId } },
+    include: {
+      vendorProfile: { select: { businessName: true } },
+      serviceRequest: { select: { status: true, title: true, updatedAt: true } },
+      userDocument: { select: { id: true, documentType: true, verificationStatus: true } }
+    },
+    orderBy: { createdAt: "desc" }
+  });
 };

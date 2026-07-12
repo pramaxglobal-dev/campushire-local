@@ -54,3 +54,19 @@ export const getSharedCandidateDocuments = async (candidateUserId: string): Prom
   const response = await apiClient.get(`/api/documents/candidate/${candidateUserId}`);
   return unwrapResponse(response);
 };
+
+export interface DocumentVerificationView {
+  id: string;
+  status: string;
+  comment: string | null;
+  verifiedAt: string | null;
+  createdAt: string;
+  vendorProfile: { businessName: string };
+  serviceRequest: { status: string; title: string; updatedAt: string };
+  userDocument: { id: string; documentType: string; verificationStatus: string } | null;
+}
+
+export const getMyDocumentVerifications = async (): Promise<DocumentVerificationView[]> => {
+  const response = await apiClient.get("/api/documents/verifications");
+  return unwrapResponse(response);
+};

@@ -31,6 +31,7 @@ export interface RegisterDto {
   role: UserRole;
   inviteCode?: string;
   phone?: string;
+  organizationName?: string;
 }
 
 export interface LoginDto {

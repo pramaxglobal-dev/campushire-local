@@ -4,6 +4,7 @@ import {
   CourseFiltersSchema,
   CourseIdParamSchema,
   CreateCourseSchema,
+  PartnerEnrollmentQuerySchema,
   UpdateCourseSchema,
   UpdateEnrollmentProgressSchema
 } from "./training.schema";
@@ -13,6 +14,7 @@ import {
   getCourse,
   getMyEnrollments,
   getPartnerCourses,
+  getPartnerEnrollments,
   getPartnerStats,
   listCourses,
   publishCourse,
@@ -228,6 +230,21 @@ export const getPartnerCoursesController = async (
       data: courses,
       error: null
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getPartnerEnrollmentsController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const actor = requireUser(req);
+    const query = PartnerEnrollmentQuerySchema.parse(req.query);
+    const enrollments = await getPartnerEnrollments(actor.userId, query.courseId);
+    res.status(200).json({ success: true, data: enrollments, error: null });
   } catch (error) {
     next(error);
   }

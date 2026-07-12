@@ -170,7 +170,8 @@ export const RegisterForm = () => {
         lastName: lastName.trim(),
         role,
         inviteCode: inviteCode.trim() || undefined,
-        phone: phone.trim() || undefined
+        phone: phone.trim() || undefined,
+        organizationName: organizationName.trim() || undefined
       };
 
       await registerUser(dto);

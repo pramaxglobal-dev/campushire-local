@@ -1,81 +1,66 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
 import { ErrorState } from "@/components/common/ErrorState";
 import { JobEditorForm } from "@/components/common/JobEditorForm";
-import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
 import { PageHeader } from "@/components/common/PageHeader";
 import {
   getJob,
-  submitJobForApproval,
   updateJob,
+  submitJobForApproval,
   type CreateJobDto,
   type JobDetail
 } from "@/lib/api/jobs.api";
 import { ROUTES } from "@/lib/utils/routes";
 
+/**
+ * Job Edit Page
+ *
+ * Reuses the existing JobEditorForm component — no duplication.
+ * Loads the existing job via getJob, passes values as initialValues,
+ * then calls updateJob (not createJob) on save.
+ *
+ * Route: /dashboard/jobs/[id]/edit
+ */
 export default function EditJobPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const jobId = params.id;
+
   const [job, setJob] = useState<JobDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const loadJob = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getJob(params.id);
-      setJob(data);
+      const detail = await getJob(jobId);
+      setJob(detail);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load job.");
+      setError(loadError instanceof Error ? loadError.message : "Unable to load job details.");
     } finally {
       setLoading(false);
     }
-  }, [params.id]);
+  }, [jobId]);
 
   useEffect(() => {
     void loadJob();
   }, [loadJob]);
 
-  const initialValues = useMemo<Partial<CreateJobDto> | undefined>(() => {
-    if (!job) return undefined;
-    return {
-      title: job.title,
-      description: job.description,
-      jobType: job.jobType,
-      workMode: job.workMode,
-      locationCity: job.locationCity ?? undefined,
-      locationState: job.locationState ?? undefined,
-      openings: job.openings,
-      applicationDeadline:
-        job.applicationDeadline instanceof Date
-          ? job.applicationDeadline.toISOString()
-          : job.applicationDeadline ?? undefined,
-      salaryMin: job.minCtc ?? undefined,
-      salaryMax: job.maxCtc ?? undefined,
-      experienceMin: job.experienceMinMonths ?? undefined,
-      experienceMax: job.experienceMaxMonths ?? undefined,
-      skillsRequired: job.skills.map((skill) => ({ name: skill, isMandatory: false })),
-      screeningQuestions: job.screeningQuestions,
-      targetCollegeIds: job.collegeProfileId ? [job.collegeProfileId] : [],
-      commissionPct: job.referralCommissionValue ?? undefined,
-      commissionType: job.referralCommissionType ?? undefined,
-      commissionTrigger: job.referralCommissionTrigger ?? undefined
-    };
-  }, [job]);
-
   const saveDraft = async (dto: CreateJobDto) => {
     setSaving(true);
     try {
-      await updateJob(params.id, { ...dto, status: "DRAFT" });
-      toast.success("Draft updated");
-      await loadJob();
+      await updateJob(jobId, { ...dto, status: "DRAFT" });
+      toast.success("Job draft updated");
+      // Stay on edit page — user may want to keep editing
     } catch (saveError) {
-      toast.error(saveError instanceof Error ? saveError.message : "Unable to update draft.");
+      toast.error(saveError instanceof Error ? saveError.message : "Unable to save job.");
     } finally {
       setSaving(false);
     }
@@ -84,10 +69,10 @@ export default function EditJobPage() {
   const saveAndSubmit = async (dto: CreateJobDto) => {
     setSaving(true);
     try {
-      await updateJob(params.id, { ...dto, status: "DRAFT" });
-      await submitJobForApproval(params.id);
-      toast.success("Job submitted for approval");
-      router.push(ROUTES.ats.board(params.id));
+      await updateJob(jobId, dto);
+      await submitJobForApproval(jobId);
+      toast.success("Job updated and submitted for approval");
+      router.push(ROUTES.ats.board(jobId));
     } catch (saveError) {
       toast.error(saveError instanceof Error ? saveError.message : "Unable to submit job.");
     } finally {
@@ -95,14 +80,41 @@ export default function EditJobPage() {
     }
   };
 
-  if (loading) return <LoadingSkeleton variant="profile" count={1} />;
-  if (error || !job) return <ErrorState message={error ?? "Unable to load job."} onRetry={() => void loadJob()} />;
+  if (loading) return <LoadingSkeleton variant="card" count={4} />;
+  if (error || !job) {
+    return <ErrorState message={error ?? "Unable to load job."} onRetry={() => void loadJob()} />;
+  }
+
+  // Map JobDetail → CreateJobDto initial values for the form
+  const initialValues: Partial<CreateJobDto> = {
+    title: job.title,
+    description: job.description,
+    jobType: job.jobType,
+    workMode: job.workMode,
+    locationCity: job.locationCity ?? undefined,
+    locationState: job.locationState ?? undefined,
+    openings: job.openings,
+    salaryMin: job.minCtc ?? undefined,
+    salaryMax: job.maxCtc ?? undefined,
+    experienceMin: job.experienceMinMonths ?? undefined,
+    experienceMax: job.experienceMaxMonths ?? undefined,
+    applicationDeadline: job.applicationDeadline
+      ? new Date(job.applicationDeadline).toISOString().slice(0, 10)
+      : undefined,
+    screeningQuestions: Array.isArray(job.screeningQuestions) ? job.screeningQuestions : [],
+    status: job.status
+  };
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Edit Job - ${job.title}`}
-        subtitle="Update the job configuration and submit when ready."
+        title="Edit Job"
+        subtitle={`Updating: ${job.title}`}
+        breadcrumb={
+          <Link href={ROUTES.jobs.list} className="text-accent hover:underline">
+            ← Back to Jobs
+          </Link>
+        }
       />
 
       <JobEditorForm

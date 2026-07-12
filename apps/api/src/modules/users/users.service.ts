@@ -10,13 +10,15 @@ import {
 } from "@campushire/types";
 import { isProfileComplete, sanitizeInput } from "@campushire/utils";
 import { prisma } from "../../lib/prisma";
+import { comparePassword } from "../../lib/bcrypt";
+import { logActivity } from "../../lib/activity";
 import { generateFileKey, getPresignedUrl, uploadFile } from "../../lib/s3";
 import { FULL_USER_PROFILE_SELECT, type FullUserProfile } from "../../lib/user-selects";
 import {
   calculateAuthoritativeCareerScore,
   writeCareerScoreForUser
 } from "../../lib/career-score";
-import type { UpdateProfileDto, NotificationPrefDto } from "./users.schema";
+import type { UpdateProfileDto, NotificationPrefDto, DeactivateAccountDto } from "./users.schema";
 
 class ServiceError extends Error {
   statusCode: number;
@@ -350,6 +352,47 @@ export const updateNotificationPreferences = async (
       tenantId
     },
     orderBy: [{ type: "asc" }, { channel: "asc" }]
+  });
+};
+
+export const deactivateAccount = async (
+  userId: string,
+  tenantId: string | null,
+  dto: DeactivateAccountDto
+): Promise<void> => {
+  const user = await prisma.user.findFirst({ where: { id: userId, tenantId } });
+  if (!user) throw new ServiceError("User not found.", 404);
+  if (user.passwordHash) {
+    if (!dto.password || !(await comparePassword(dto.password, user.passwordHash))) {
+      throw new ServiceError("Current password is incorrect.", 403);
+    }
+  }
+  if (user.role === UserRole.SUPER_ADMIN) {
+    const activeAdmins = await prisma.user.count({ where: { role: UserRole.SUPER_ADMIN, isActive: true } });
+    if (activeAdmins <= 1) throw new ServiceError("The final active Super Admin cannot be deactivated.", 409);
+  }
+  const metadata = user.metadata && typeof user.metadata === "object" && !Array.isArray(user.metadata)
+    ? (user.metadata as Record<string, unknown>)
+    : {};
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: {
+        isActive: false,
+        metadata: { ...metadata, selfDeactivated: true, selfDeactivatedAt: new Date().toISOString() } as Prisma.InputJsonValue
+      }
+    }),
+    prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date(), revokedReason: "ACCOUNT_DEACTIVATED" }
+    })
+  ]);
+  await logActivity({
+    actorUserId: userId,
+    tenantId: tenantId ?? undefined,
+    action: "user.account_deactivated",
+    entityType: "User",
+    entityId: userId
   });
 };
 

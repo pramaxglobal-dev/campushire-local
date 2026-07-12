@@ -9,6 +9,7 @@ import {
   getCourseController,
   getMyEnrollmentsController,
   getPartnerCoursesController,
+  getPartnerEnrollmentsController,
   getPartnerStatsController,
   listCoursesController,
   publishCourseController,
@@ -62,6 +63,12 @@ trainingRouter.get(
   authenticateJWT,
   requireRole(UserRole.TRAINING_PARTNER),
   getPartnerCoursesController
+);
+trainingRouter.get(
+  "/enrollments",
+  authenticateJWT,
+  requireRole(UserRole.TRAINING_PARTNER),
+  getPartnerEnrollmentsController
 );
 
 export { courseRouter as courseRoutes, trainingRouter as trainingRoutes };

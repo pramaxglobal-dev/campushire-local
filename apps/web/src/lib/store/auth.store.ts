@@ -32,16 +32,19 @@ const persistUserStatusCookies = (user: FullUserProfile): void => {
 
 const readStorage = (key: string): string | null => {
   if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(key);
+  return window.sessionStorage.getItem(key) ?? window.localStorage.getItem(key);
 };
 
-const writeStorage = (key: string, value: string | null): void => {
+const writeStorage = (key: string, value: string | null, persistent = true): void => {
   if (typeof window === "undefined") return;
+  const selected = persistent ? window.localStorage : window.sessionStorage;
+  const other = persistent ? window.sessionStorage : window.localStorage;
+  other.removeItem(key);
   if (value === null) {
-    window.localStorage.removeItem(key);
+    selected.removeItem(key);
     return;
   }
-  window.localStorage.setItem(key, value);
+  selected.setItem(key, value);
 };
 
 export interface AuthState {
@@ -50,7 +53,7 @@ export interface AuthState {
   refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  setTokens: (accessToken: string, refreshToken: string) => void;
+  setTokens: (accessToken: string, refreshToken: string, persistent?: boolean) => void;
   setUser: (user: FullUserProfile) => void;
   clearSession: () => void;
   logout: () => void;
@@ -64,11 +67,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   refreshToken: readStorage(REFRESH_KEY),
   isAuthenticated: Boolean(readStorage(ACCESS_KEY)),
   isLoading: false,
-  setTokens: (accessToken: string, refreshToken: string) => {
-    writeStorage(ACCESS_KEY, accessToken);
-    writeStorage(REFRESH_KEY, refreshToken);
-    setCookie("campushire_access_token", accessToken);
-    setCookie("campushire_refresh_token", refreshToken);
+  setTokens: (accessToken: string, refreshToken: string, persistent = true) => {
+    writeStorage(ACCESS_KEY, accessToken, persistent);
+    writeStorage(REFRESH_KEY, refreshToken, persistent);
     set({ accessToken, refreshToken, isAuthenticated: true });
   },
   setUser: (user: FullUserProfile) => {
@@ -78,8 +79,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   clearSession: () => {
     writeStorage(ACCESS_KEY, null);
     writeStorage(REFRESH_KEY, null);
-    removeCookie("campushire_access_token");
-    removeCookie("campushire_refresh_token");
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem(ACCESS_KEY);
+      window.sessionStorage.removeItem(REFRESH_KEY);
+    }
     removeCookie("campushire_user_role");
     removeCookie("campushire_user_approved");
     removeCookie("campushire_user_suspended");

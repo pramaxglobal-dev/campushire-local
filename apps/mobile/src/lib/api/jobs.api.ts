@@ -15,6 +15,13 @@ export interface JobCard {
   matchScore: number;
 }
 
+export interface JobDetail extends JobCard {
+  description: string;
+  screeningQuestions: Array<{ question: string; type: string; isRequired: boolean }>;
+  applicationDeadline: string | null;
+  openings: number;
+}
+
 export interface JobsResponse {
   success: boolean;
   data: JobCard[];
@@ -44,6 +51,11 @@ export const listJobs = async (filters: JobFilters): Promise<JobsResponse> => {
 
 export const getJobFeed = async (page = 1, limit = 20): Promise<JobsResponse> => {
   const response = await apiClient.get("/api/jobs/feed", { params: { page, limit } });
+  return unwrapResponse(response);
+};
+
+export const getJob = async (jobId: string): Promise<JobDetail> => {
+  const response = await apiClient.get(`/api/jobs/${jobId}`);
   return unwrapResponse(response);
 };
 

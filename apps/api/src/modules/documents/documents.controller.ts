@@ -9,6 +9,7 @@ import {
 import {
   deleteDocument,
   getMyDocuments,
+  getMyDocumentVerifications,
   getSharedDocuments,
   requestVerification,
   toggleShareWithRecruiters,
@@ -30,6 +31,19 @@ const requireUserId = (req: Request): string => {
     throw new ControllerError("Unauthorized", 401);
   }
   return req.user.userId;
+};
+
+export const getMyDocumentVerificationsController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const rows = await getMyDocumentVerifications(requireUserId(req));
+    res.status(200).json({ success: true, data: rows, error: null });
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const uploadDocumentController = async (

@@ -57,3 +57,7 @@ export const updateNotificationPreferences = async (
   const response = await apiClient.put("/api/users/notification-preferences", dto);
   return unwrapResponse(response);
 };
+
+export const deactivateAccount = async (password?: string): Promise<void> => {
+  await apiClient.delete("/api/users/account", { data: { confirmation: "DEACTIVATE", password } });
+};

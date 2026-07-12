@@ -30,6 +30,7 @@ import {
   getMyEvents,
   listEvents,
   registerForEvent,
+  updateEvent,
   type CreateEventDto,
   type EventFilters
 } from "@/lib/api/events.api";
@@ -66,6 +67,7 @@ export default function EventsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [form, setForm] = useState<EventFormState>(initialForm);
   const [eventTypeFilter, setEventTypeFilter] = useState<string>("");
   const [dateFrom, setDateFrom] = useState("");
@@ -102,7 +104,7 @@ export default function EventsPage() {
     void load();
   }, [load]);
 
-  const onCreate = async (): Promise<void> => {
+  const onSave = async (): Promise<void> => {
     if (!form.title || !form.startAt || !form.endAt) {
       toast.error("Title, start date and end date are required.");
       return;
@@ -120,14 +122,41 @@ export default function EventsPage() {
     };
 
     try {
-      await createEvent(payload);
-      toast.success("Event created.");
+      if (editingEventId) {
+        await updateEvent(editingEventId, payload);
+        toast.success("Event updated.");
+      } else {
+        await createEvent(payload);
+        toast.success("Event created.");
+      }
       setCreateOpen(false);
+      setEditingEventId(null);
       setForm(initialForm);
       await load();
     } catch (createError) {
       toast.error(createError instanceof Error ? createError.message : "Unable to create event.");
     }
+  };
+
+  const openCreate = (): void => {
+    setEditingEventId(null);
+    setForm(initialForm);
+    setCreateOpen(true);
+  };
+
+  const openEdit = (event: PlacementEvent): void => {
+    setEditingEventId(event.id);
+    setForm({
+      title: event.title,
+      description: event.description ?? "",
+      eventType: event.eventType,
+      startAt: new Date(event.startAt).toISOString().slice(0, 16),
+      endAt: new Date(event.endAt).toISOString().slice(0, 16),
+      venue: event.venue ?? "",
+      maxParticipants: event.maxParticipants ? String(event.maxParticipants) : "",
+      isOpenToAll: event.isOpenToAll
+    });
+    setCreateOpen(true);
   };
 
   const onRegister = async (eventId: string): Promise<void> => {
@@ -160,7 +189,7 @@ export default function EventsPage() {
         subtitle="Discover, manage, and register for campus events."
         actions={
           isCollegeAdmin ? (
-            <Button onClick={() => setCreateOpen(true)}>
+            <Button onClick={openCreate}>
               <Plus className="mr-2 h-4 w-4" />
               Create Event
             </Button>
@@ -226,6 +255,11 @@ export default function EventsPage() {
                             </Button>
                           </Link>
                           {event.status !== "CANCELLED" ? (
+                            <Button size="sm" variant="outline" onClick={() => openEdit(event)}>
+                              Edit
+                            </Button>
+                          ) : null}
+                          {event.status !== "CANCELLED" ? (
                             <Button size="sm" variant="destructive" onClick={() => void onCancelEvent(event.id)}>
                               Cancel
                             </Button>
@@ -279,7 +313,14 @@ export default function EventsPage() {
         )}
       </div>
 
-      <Modal open={createOpen} onOpenChange={setCreateOpen} title="Create Event">
+      <Modal
+        open={createOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) setEditingEventId(null);
+        }}
+        title={editingEventId ? "Edit Event" : "Create Event"}
+      >
         <div className="space-y-3">
           <Input label="Title" value={form.title} onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))} />
           <Textarea
@@ -316,7 +357,7 @@ export default function EventsPage() {
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => void onCreate()}>Create Event</Button>
+            <Button onClick={() => void onSave()}>{editingEventId ? "Save Changes" : "Create Event"}</Button>
           </div>
         </div>
       </Modal>

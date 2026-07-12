@@ -11,6 +11,8 @@ import {
 import {
   approveUser,
   broadcastNotification,
+  listAuditLogs,
+  listPlatformSettings,
   listFeatureFlags,
   getPendingApprovals,
   getPlatformStats,
@@ -212,6 +214,32 @@ export const updatePlatformSettingController = async (
       data: setting,
       error: null
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listPlatformSettingsController = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const settings = await listPlatformSettings();
+    res.status(200).json({ success: true, data: settings, error: null });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listAuditLogsController = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const logs = await listAuditLogs();
+    res.status(200).json({ success: true, data: logs, error: null });
   } catch (error) {
     next(error);
   }

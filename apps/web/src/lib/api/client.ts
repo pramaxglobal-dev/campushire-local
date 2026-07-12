@@ -1,6 +1,7 @@
 import axios, {
   AxiosError,
   type AxiosInstance,
+  type InternalAxiosRequestConfig,
   type AxiosRequestConfig,
   type AxiosResponse,
   HttpStatusCode
@@ -34,6 +35,7 @@ const notifyPending = (token: string | null): void => {
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15000,
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json"
   }
@@ -42,12 +44,33 @@ export const apiClient: AxiosInstance = axios.create({
 export const publicApiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15000,
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json"
   }
 });
 
+const readCookie = (name: string): string | null => {
+  if (typeof document === "undefined") return null;
+  const item = document.cookie.split("; ").find((cookie) => cookie.startsWith(`${name}=`));
+  return item ? decodeURIComponent(item.slice(name.length + 1)) : null;
+};
+
+const attachCsrfToken = (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
+  const method = config.method?.toUpperCase() ?? "GET";
+  if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+    const csrfToken = readCookie("campushire_csrf_token");
+    if (csrfToken) {
+      config.headers["x-csrf-token"] = csrfToken;
+    }
+  }
+  return config;
+};
+
+publicApiClient.interceptors.request.use(attachCsrfToken);
+
 apiClient.interceptors.request.use((config) => {
+  attachCsrfToken(config);
   const token = useAuthStore.getState().accessToken;
   if (token) {
     config.headers = config.headers ?? {};

@@ -1,4 +1,4 @@
-import type { FeatureFlag, PaginatedResponse, PlatformSetting, Tenant, UserRole, Plan } from "@campushire/types";
+import type { ActivityLog, FeatureFlag, PaginatedResponse, PlatformSetting, Tenant, UserRole, Plan } from "@campushire/types";
 import { apiClient, unwrapPaginatedResponse, unwrapResponse, unwrapVoidResponse } from "@/lib/api/client";
 import type { SafeUser } from "@/lib/api/auth.api";
 import type { FullUserProfile } from "@/lib/utils/profile-types";
@@ -40,6 +40,11 @@ export interface FeatureFlagListItem {
   isEnabled: boolean;
   enabledForPlans: Plan[];
   description: string | null;
+}
+
+export interface AuditLogView extends ActivityLog {
+  user: { firstName: string; lastName: string; email: string } | null;
+  tenant: { name: string } | null;
 }
 
 export const listUsers = async (
@@ -93,6 +98,26 @@ export const listTenants = async (
 
 export const createTenant = async (payload: Partial<Tenant>): Promise<Tenant> => {
   const response = await apiClient.post("/api/tenants", payload);
+  return unwrapResponse(response);
+};
+
+export const updateTenant = async (id: string, payload: Partial<Tenant>): Promise<Tenant> => {
+  const response = await apiClient.put(`/api/tenants/${id}`, payload);
+  return unwrapResponse(response);
+};
+
+export const toggleTenantActive = async (id: string): Promise<Tenant> => {
+  const response = await apiClient.patch(`/api/tenants/${id}/toggle`);
+  return unwrapResponse(response);
+};
+
+export const listPlatformSettings = async (): Promise<PlatformSetting[]> => {
+  const response = await apiClient.get("/api/admin/settings");
+  return unwrapResponse(response);
+};
+
+export const listAuditLogs = async (): Promise<AuditLogView[]> => {
+  const response = await apiClient.get("/api/admin/audit-logs");
   return unwrapResponse(response);
 };
 

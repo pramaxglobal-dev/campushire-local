@@ -20,10 +20,12 @@ import { PageHeader } from "@/components/common/PageHeader";
 import {
   deleteDocument,
   getMyDocuments,
+  getMyDocumentVerifications,
   getSharedCandidateDocuments,
   requestVerification,
   toggleShareWithRecruiters,
-  uploadDocument
+  uploadDocument,
+  type DocumentVerificationView
 } from "@/lib/api/documents.api";
 import { listVendors } from "@/lib/api/vendors.api";
 import { useAuthStore } from "@/lib/store/auth.store";
@@ -77,6 +79,7 @@ export default function DocumentsVaultPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserDocument | null>(null);
+  const [verifications, setVerifications] = useState<DocumentVerificationView[]>([]);
 
   const isRecruiter = user?.role === UserRole.CORPORATE_RECRUITER;
 
@@ -84,11 +87,13 @@ export default function DocumentsVaultPage() {
     setLoading(true);
     setError(null);
     try {
-      const [docs, vendorResponse] = await Promise.all([
+      const [docs, vendorResponse, verificationRows] = await Promise.all([
         getMyDocuments(),
-        listVendors({ vendorType: undefined, isVerified: true, page: 1, limit: 50 })
+        listVendors({ vendorType: undefined, isVerified: true, page: 1, limit: 50 }),
+        getMyDocumentVerifications()
       ]);
       setDocuments(docs);
+      setVerifications(verificationRows);
       setVendors(
         (vendorResponse.data ?? []).map((vendor) => ({
           id: vendor.id,
@@ -226,6 +231,27 @@ export default function DocumentsVaultPage() {
           />
         </CardContent>
       </Card>
+
+      {verifications.length > 0 ? (
+        <Card>
+          <CardContent className="space-y-3 p-5">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Verification activity</h2>
+              <p className="text-sm text-slate-600">Track reviewer decisions and completion notes.</p>
+            </div>
+            {verifications.map((verification) => (
+              <div key={verification.id} className="flex flex-col gap-2 rounded-xl border border-slate-200 p-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="font-medium text-slate-900">{verification.userDocument?.documentType.replaceAll("_", " ") ?? verification.serviceRequest.title}</p>
+                  <p className="text-sm text-slate-600">Reviewer: {verification.vendorProfile.businessName}</p>
+                  {verification.comment ? <p className="mt-1 text-sm text-slate-700">{verification.comment}</p> : null}
+                </div>
+                <Badge className={getStatusColor(verification.status)}>{verification.status.replaceAll("_", " ")}</Badge>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="flex gap-2">
         <Button

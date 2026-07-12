@@ -110,6 +110,11 @@ export const ActivityQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20)
 });
 
+export const DeactivateAccountSchema = z.object({
+  confirmation: z.literal("DEACTIVATE"),
+  password: z.string().min(1).optional()
+});
+
 export const UpdateProfileRoleSchema = z.object({
   role: z.nativeEnum(UserRole)
 });
@@ -117,3 +122,4 @@ export const UpdateProfileRoleSchema = z.object({
 export type UpdateProfileDto = z.infer<typeof UpdateProfileSchema>;
 export type NotificationPrefDto = z.infer<typeof NotificationPreferenceSchema>;
 export type ActivityQueryDto = z.infer<typeof ActivityQuerySchema>;
+export type DeactivateAccountDto = z.infer<typeof DeactivateAccountSchema>;

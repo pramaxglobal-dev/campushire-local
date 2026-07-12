@@ -6,6 +6,7 @@ import {
   Plan,
   UserRole,
   type FeatureFlag,
+  type ActivityLog,
   type FreelanceRecruiterProfile,
   type CollegeProfile,
   type PaginatedResponse,
@@ -466,6 +467,24 @@ export const updatePlatformSetting = async (
   });
 
   return setting;
+};
+
+export const listPlatformSettings = async (): Promise<PlatformSetting[]> => {
+  return prisma.platformSetting.findMany({
+    where: { tenantId: null },
+    orderBy: { key: "asc" }
+  });
+};
+
+export const listAuditLogs = async (): Promise<Array<ActivityLog & { user: { firstName: string; lastName: string; email: string } | null; tenant: { name: string } | null }>> => {
+  return prisma.activityLog.findMany({
+    include: {
+      user: { select: { firstName: true, lastName: true, email: true } },
+      tenant: { select: { name: true } }
+    },
+    orderBy: { createdAt: "desc" },
+    take: 200
+  });
 };
 
 export const toggleFeatureFlag = async (key: string, adminId: string): Promise<FeatureFlag> => {

@@ -43,7 +43,7 @@ export default function RegisterScreen() {
   const [step, setStep] = useState(1);
   const [role, setRole] = useState<UserRole>(UserRole.STUDENT);
   const [loading, setLoading] = useState(false);
-  const { control, handleSubmit, formState: { errors }, watch } = useForm<RegisterForm>({
+  const { control, handleSubmit, formState: { errors }, watch, trigger } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
       firstName: "",
@@ -59,6 +59,15 @@ export default function RegisterScreen() {
     () => role === UserRole.STUDENT,
     [role]
   );
+
+  const goNext = async () => {
+    if (step === 1) {
+      setStep(2);
+      return;
+    }
+    const valid = await trigger(["firstName", "lastName", "email", "password", "confirmPassword"]);
+    if (valid) setStep(3);
+  };
 
   const submit = handleSubmit(async (values) => {
     setLoading(true);
@@ -169,7 +178,7 @@ export default function RegisterScreen() {
           <Button label="Back" variant="outline" onPress={() => setStep((current) => current - 1)} />
         ) : null}
         {step < 3 ? (
-          <Button label="Next" onPress={() => setStep((current) => current + 1)} />
+          <Button label="Next" onPress={() => void goNext()} />
         ) : (
           <Button
             label={loading ? "Creating..." : "Create Account"}

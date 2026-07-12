@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum Plan {
@@ -254,6 +255,7 @@ enum ChatContextType {
   REFERRAL
   SERVICE_REQUEST
   COLLEGE_RECRUITER
+  COURSE_ENROLLMENT
 }
 
 enum MessageType {
@@ -1251,6 +1253,7 @@ model CourseEnrollment {
   course          Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
   user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   revenues        CourseRevenue[]
+  chatThreads     ChatThread[]
 
   @@unique([courseId, userId])
   @@index([courseId])
@@ -1318,6 +1321,7 @@ model ChatThread {
   referralId                  String?           @map("referral_id")
   serviceRequestId            String?           @map("service_request_id")
   collegeRecruiterConnectionId String?          @map("college_recruiter_connection_id")
+  courseEnrollmentId            String?          @map("course_enrollment_id")
   createdByUserId             String            @map("created_by_user_id")
   participantUserIds          Json?             @map("participant_user_ids")
   lastMessageAt               DateTime?         @map("last_message_at")
@@ -1329,6 +1333,7 @@ model ChatThread {
   referral                    FreelanceReferral? @relation(fields: [referralId], references: [id], onDelete: SetNull)
   serviceRequest              ServiceRequest?   @relation(fields: [serviceRequestId], references: [id], onDelete: SetNull)
   collegeRecruiterConnection  CollegeRecruiterConnection? @relation(fields: [collegeRecruiterConnectionId], references: [id], onDelete: SetNull)
+  courseEnrollment             CourseEnrollment? @relation(fields: [courseEnrollmentId], references: [id], onDelete: SetNull)
   createdBy                   User              @relation("chat_thread_creator", fields: [createdByUserId], references: [id], onDelete: Cascade)
   messages                    ChatMessage[]
 
@@ -1337,6 +1342,7 @@ model ChatThread {
   @@index([referralId])
   @@index([serviceRequestId])
   @@index([collegeRecruiterConnectionId])
+  @@index([courseEnrollmentId])
   @@index([createdByUserId])
   @@index([contextType])
   @@index([isClosed])

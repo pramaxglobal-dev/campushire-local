@@ -7,6 +7,8 @@ export const WhiteLabelTenantQuerySchema = z.object({
 export const WhiteLabelConfigSchema = z.object({
   tenantId: z.string().trim().min(1).optional(),
   brandName: z.string().trim().min(2).max(200),
+  tagline: z.string().trim().max(240).optional(),
+  subdomain: z.string().trim().min(2).max(63).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(),
   primaryColor: z
     .string()
     .trim()

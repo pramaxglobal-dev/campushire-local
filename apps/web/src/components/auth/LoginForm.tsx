@@ -36,7 +36,7 @@ export const LoginForm = () => {
     setFormError(null);
 
     try {
-      await login(values);
+      await login(values, rememberMe);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to sign in.";
       setFormError(message);

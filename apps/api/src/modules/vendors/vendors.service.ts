@@ -5,6 +5,7 @@ import {
   ServiceRequestStatus,
   ServiceRequestType,
   UserRole,
+  VerificationStatus,
   type PaginatedResponse,
   type ServiceRequest,
   type VendorProfile
@@ -336,6 +337,26 @@ export const respondToServiceRequest = async (
     }
   });
 
+  if (request.type === ServiceRequestType.DOCUMENT_VERIFICATION && action === "reject") {
+    const verification = await prisma.documentVerification.findFirst({ where: { serviceRequestId: request.id } });
+    if (verification) {
+      await prisma.$transaction([
+        prisma.documentVerification.update({
+          where: { id: verification.id },
+          data: {
+            status: VerificationStatus.REJECTED,
+            reviewerUserId: vendorId,
+            comment: note ? sanitizeInput(note) : null
+          }
+        }),
+        ...(verification.userDocumentId ? [prisma.userDocument.update({
+          where: { id: verification.userDocumentId },
+          data: { verificationStatus: VerificationStatus.REJECTED }
+        })] : [])
+      ]);
+    }
+  }
+
   await sendNotification({
     userId: request.requesterUserId,
     type: NotificationType.SYSTEM,
@@ -411,6 +432,27 @@ export const completeServiceRequest = async (
       })
     }
   });
+
+  if (request.type === ServiceRequestType.DOCUMENT_VERIFICATION) {
+    const verification = await prisma.documentVerification.findFirst({ where: { serviceRequestId: request.id } });
+    if (verification) {
+      await prisma.$transaction([
+        prisma.documentVerification.update({
+          where: { id: verification.id },
+          data: {
+            status: VerificationStatus.VERIFIED,
+            reviewerUserId: vendorId,
+            comment: sanitizeInput(note),
+            verifiedAt: new Date()
+          }
+        }),
+        ...(verification.userDocumentId ? [prisma.userDocument.update({
+          where: { id: verification.userDocumentId },
+          data: { verificationStatus: VerificationStatus.VERIFIED }
+        })] : [])
+      ]);
+    }
+  }
 
   await sendNotification({
     userId: request.requesterUserId,

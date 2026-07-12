@@ -10,9 +10,10 @@ interface JobCardProps {
   job: JobCardType;
   onApply: (jobId: string) => void;
   onToggleSave?: (jobId: string) => void;
+  onView?: (jobId: string) => void;
 }
 
-export function JobCard({ job, onApply, onToggleSave }: JobCardProps) {
+export function JobCard({ job, onApply, onToggleSave, onView }: JobCardProps) {
   return (
     <Card style={styles.card}>
       <View style={styles.headerRow}>
@@ -49,6 +50,7 @@ export function JobCard({ job, onApply, onToggleSave }: JobCardProps) {
 
       <View style={styles.footerRow}>
         <Badge label={`${Math.round(job.matchScore)}% Match`} variant="success" />
+        <TouchableOpacity onPress={() => onView?.(job.id)} style={styles.viewButton}><Text style={styles.viewText}>Details</Text></TouchableOpacity>
         <Button
           label={job.hasApplied ? "Applied" : "Apply"}
           onPress={() => onApply(job.id)}
@@ -124,5 +126,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     gap: 8
-  }
+  },
+  viewButton: { paddingHorizontal: 10, paddingVertical: 8 },
+  viewText: { color: Colors.primary, fontWeight: "700", fontSize: 13 }
 });

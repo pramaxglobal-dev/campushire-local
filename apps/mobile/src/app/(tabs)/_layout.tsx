@@ -2,6 +2,8 @@ import { Tabs } from "expo-router";
 import { Text } from "react-native";
 import { Colors } from "@/constants/colors";
 import { useNotifications } from "@/lib/hooks/useNotifications";
+import { UserRole } from "@campushire/types";
+import { useAuthStore } from "@/lib/store/auth.store";
 
 const TabIcon = ({ label, focused }: { label: string; focused: boolean }) => (
   <Text style={{ color: focused ? Colors.accent : "#FFFFFF", fontSize: 12 }}>{label}</Text>
@@ -9,6 +11,9 @@ const TabIcon = ({ label, focused }: { label: string; focused: boolean }) => (
 
 export default function TabsLayout() {
   const { unreadCount } = useNotifications();
+  const role = useAuthStore((state) => state.user?.role);
+  const isCandidate = role === UserRole.STUDENT || role === UserRole.JOB_SEEKER;
+  const usesInterviews = isCandidate || role === UserRole.CORPORATE_RECRUITER;
 
   return (
     <Tabs
@@ -32,6 +37,7 @@ export default function TabsLayout() {
         name="applications"
         options={{
           title: "Applications",
+          href: isCandidate ? undefined : null,
           tabBarIcon: ({ focused }: { focused: boolean }) => (
             <TabIcon label="Apps" focused={focused} />
           )
@@ -41,8 +47,19 @@ export default function TabsLayout() {
         name="interviews"
         options={{
           title: "Interviews",
+          href: usesInterviews ? undefined : null,
           tabBarIcon: ({ focused }: { focused: boolean }) => (
             <TabIcon label="Calls" focused={focused} />
+          )
+        }}
+      />
+      <Tabs.Screen
+        name="role"
+        options={{
+          title: role === UserRole.SUPER_ADMIN ? "Manage" : "Workspace",
+          href: isCandidate ? null : undefined,
+          tabBarIcon: ({ focused }: { focused: boolean }) => (
+            <TabIcon label="Work" focused={focused} />
           )
         }}
       />

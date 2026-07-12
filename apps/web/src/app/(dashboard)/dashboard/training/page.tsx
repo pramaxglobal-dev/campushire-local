@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CourseLevel, CourseMode, type Course } from "@campushire/types";
+import { ChatContextType, CourseLevel, CourseMode, type Course } from "@campushire/types";
+import { useRouter } from "next/navigation";
 import { formatCurrency } from "@campushire/utils";
 import { BarChart3, BookOpen, DollarSign, GraduationCap } from "lucide-react";
 import {
@@ -24,15 +25,19 @@ import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
 import { PageHeader } from "@/components/common/PageHeader";
 import {
   createCourse,
-  getCourse,
+  getPartnerEnrollments,
   getPartnerCourses,
   getPartnerStats,
   publishCourse,
   unpublishCourse,
+  updateCourse,
   type CreateCourseDto,
+  type PartnerEnrollment,
   type TrainingStats
 } from "@/lib/api/training.api";
 import { toast } from "sonner";
+import { asArray } from "@/lib/utils/dashboard";
+import { getOrCreateThread } from "@/lib/api/chat.api";
 
 interface CourseFormState {
   title: string;
@@ -55,31 +60,30 @@ const initialCourseForm: CourseFormState = {
 };
 
 export default function TrainingDashboardPage() {
+  const router = useRouter();
   const [stats, setStats] = useState<TrainingStats | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [enrollmentCounts, setEnrollmentCounts] = useState<Record<string, number>>({});
+  const [enrollments, setEnrollments] = useState<PartnerEnrollment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [formState, setFormState] = useState<CourseFormState>(initialCourseForm);
+  const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [statsData, coursesData] = await Promise.all([getPartnerStats(), getPartnerCourses()]);
+      const [statsData, coursesData, enrollmentRows] = await Promise.all([
+        getPartnerStats(), getPartnerCourses(), getPartnerEnrollments()
+      ]);
       setStats(statsData);
       setCourses(coursesData);
-
-      const counts = await Promise.all(
-        coursesData.map(async (course) => {
-          const detail = await getCourse(course.id);
-          return { courseId: course.id, enrollmentCount: detail.enrollmentCount };
-        })
-      );
-      const mapped = counts.reduce<Record<string, number>>((acc, item) => {
-        acc[item.courseId] = item.enrollmentCount;
+      setEnrollments(enrollmentRows);
+      const mapped = enrollmentRows.reduce<Record<string, number>>((acc, item) => {
+        acc[item.courseId] = (acc[item.courseId] ?? 0) + 1;
         return acc;
       }, {});
       setEnrollmentCounts(mapped);
@@ -99,7 +103,7 @@ export default function TrainingDashboardPage() {
     return Math.round(stats.totalRevenue / stats.totalCourses);
   }, [stats]);
 
-  const handleCreateCourse = async (): Promise<void> => {
+  const handleSaveCourse = async (): Promise<void> => {
     if (!formState.title.trim() || !formState.description.trim() || !formState.price.trim()) {
       toast.error("Please complete required fields.");
       return;
@@ -120,9 +124,15 @@ export default function TrainingDashboardPage() {
 
     setCreating(true);
     try {
-      await createCourse(payload);
-      toast.success("Course created as draft.");
+      if (editingCourseId) {
+        await updateCourse(editingCourseId, payload);
+        toast.success("Course updated.");
+      } else {
+        await createCourse(payload);
+        toast.success("Course created as draft.");
+      }
       setModalOpen(false);
+      setEditingCourseId(null);
       setFormState(initialCourseForm);
       await loadData();
     } catch (createError) {
@@ -130,6 +140,39 @@ export default function TrainingDashboardPage() {
     } finally {
       setCreating(false);
     }
+  };
+
+  const startLearnerChat = async (enrollment: PartnerEnrollment): Promise<void> => {
+    try {
+      const thread = await getOrCreateThread({
+        userId: enrollment.user.id,
+        contextType: ChatContextType.COURSE_ENROLLMENT,
+        contextId: enrollment.id
+      });
+      router.push(`/dashboard/chat?threadId=${thread.id}`);
+    } catch (chatError) {
+      toast.error(chatError instanceof Error ? chatError.message : "Unable to start learner chat.");
+    }
+  };
+
+  const openCreateCourse = (): void => {
+    setEditingCourseId(null);
+    setFormState(initialCourseForm);
+    setModalOpen(true);
+  };
+
+  const openEditCourse = (course: Course): void => {
+    setEditingCourseId(course.id);
+    setFormState({
+      title: course.title,
+      description: course.description,
+      skills: asArray(course.skillsCovered).filter((skill): skill is string => typeof skill === "string").join(", "),
+      durationHours: course.durationHours ? String(course.durationHours) : "",
+      price: String(course.price),
+      level: course.level,
+      mode: course.mode
+    });
+    setModalOpen(true);
   };
 
   const handleTogglePublish = async (course: Course): Promise<void> => {
@@ -156,7 +199,7 @@ export default function TrainingDashboardPage() {
         title="Training Partner Dashboard"
         subtitle="Manage courses, enrollments, and partner revenue."
         actions={
-          <Button onClick={() => setModalOpen(true)}>
+          <Button onClick={openCreateCourse}>
             <BookOpen className="mr-2 h-4 w-4" />
             Create Course
           </Button>
@@ -205,9 +248,12 @@ export default function TrainingDashboardPage() {
                   <TableCell>{formatCurrency(course.price, course.currency)}</TableCell>
                   <TableCell>{course.level}</TableCell>
                   <TableCell>
-                    <Button size="sm" variant="outline" onClick={() => void handleTogglePublish(course)}>
-                      {course.isActive ? "Unpublish" : "Publish"}
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={() => openEditCourse(course)}>Edit</Button>
+                      <Button size="sm" variant="outline" onClick={() => void handleTogglePublish(course)}>
+                        {course.isActive ? "Unpublish" : "Publish"}
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -216,7 +262,25 @@ export default function TrainingDashboardPage() {
         </CardContent>
       </Card>
 
-      <Modal open={modalOpen} onOpenChange={setModalOpen} title="Create Course">
+      <Card>
+        <CardContent className="space-y-4 p-5">
+          <div><h2 className="text-lg font-semibold text-slate-900">Learner Success</h2><p className="text-sm text-slate-600">Monitor progress and start a course-scoped conversation with enrolled learners.</p></div>
+          {enrollments.length === 0 ? <p className="text-sm text-slate-600">No learners have enrolled yet.</p> : (
+            <Table><TableHeader><TableRow><TableCell>Learner</TableCell><TableCell>Course</TableCell><TableCell>Progress</TableCell><TableCell>Status</TableCell><TableCell>Action</TableCell></TableRow></TableHeader><TableBody>
+              {enrollments.map((enrollment) => <TableRow key={enrollment.id}><TableCell><p className="font-medium">{enrollment.user.firstName} {enrollment.user.lastName}</p><p className="text-xs text-slate-500">{enrollment.user.email}</p></TableCell><TableCell>{enrollment.course.title}</TableCell><TableCell>{enrollment.progressPct}%</TableCell><TableCell><Badge>{enrollment.status.replaceAll("_", " ")}</Badge></TableCell><TableCell><Button size="sm" variant="outline" onClick={() => void startLearnerChat(enrollment)}>Message</Button></TableCell></TableRow>)}
+            </TableBody></Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Modal
+        open={modalOpen}
+        onOpenChange={(open) => {
+          setModalOpen(open);
+          if (!open) setEditingCourseId(null);
+        }}
+        title={editingCourseId ? "Edit Course" : "Create Course"}
+      >
         <div className="space-y-3">
           <Input
             label="Title"
@@ -269,8 +333,8 @@ export default function TrainingDashboardPage() {
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => void handleCreateCourse()} disabled={creating}>
-              {creating ? "Creating..." : "Create Draft"}
+            <Button onClick={() => void handleSaveCourse()} disabled={creating}>
+              {creating ? "Saving..." : editingCourseId ? "Save Changes" : "Create Draft"}
             </Button>
           </div>
         </div>

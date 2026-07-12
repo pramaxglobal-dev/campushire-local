@@ -4,15 +4,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarClock, Clock3, ExternalLink } from "lucide-react";
 import { InterviewOutcome, UserRole, type InterviewSlot } from "@campushire/types";
 import { formatDate, getStatusColor } from "@campushire/utils";
-import { Badge, Button, Card, CardContent, Modal, Textarea } from "@/components/ui";
+import { Badge, Button, Card, CardContent, Input, Modal, Textarea } from "@/components/ui";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
 import { PageHeader } from "@/components/common/PageHeader";
 import {
+  cancelInterview,
   confirmInterview,
   getInterviews,
-  recordOutcome
+  recordOutcome,
+  rescheduleInterview
 } from "@/lib/api/interviews.api";
 import { useAuthStore } from "@/lib/store/auth.store";
 import { asRecord, toDate } from "@/lib/utils/dashboard";
@@ -32,6 +34,15 @@ export default function InterviewsPage() {
   const [selectedInterview, setSelectedInterview] = useState<InterviewSlot | null>(null);
   const [outcome, setOutcome] = useState<InterviewOutcome>(InterviewOutcome.PASSED);
   const [outcomeNote, setOutcomeNote] = useState("");
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [interviewDate, setInterviewDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [meetingLink, setMeetingLink] = useState("");
+  const [venue, setVenue] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
+  const [processing, setProcessing] = useState(false);
 
   const isRecruiter = user?.role === UserRole.CORPORATE_RECRUITER;
 
@@ -84,6 +95,61 @@ export default function InterviewsPage() {
       await loadInterviews();
     } catch (submitError) {
       toast.error(submitError instanceof Error ? submitError.message : "Unable to save outcome.");
+    }
+  };
+
+  const openReschedule = (slot: InterviewSlot): void => {
+    const start = new Date(slot.scheduledStartAt);
+    const end = new Date(slot.scheduledEndAt);
+    setSelectedInterview(slot);
+    setInterviewDate(start.toISOString().slice(0, 10));
+    setStartTime(start.toISOString().slice(11, 16));
+    setEndTime(end.toISOString().slice(11, 16));
+    setMeetingLink(slot.meetingLink ?? "");
+    setVenue(slot.location ?? "");
+    setRescheduleOpen(true);
+  };
+
+  const submitReschedule = async (): Promise<void> => {
+    if (!selectedInterview || !interviewDate || !startTime || !endTime) {
+      toast.error("Date, start time, and end time are required.");
+      return;
+    }
+    setProcessing(true);
+    try {
+      await rescheduleInterview(selectedInterview.id, {
+        interviewDate,
+        startTime,
+        endTime,
+        meetingLink: meetingLink || undefined,
+        venue: venue || undefined
+      });
+      toast.success("Interview rescheduled and participants notified.");
+      setRescheduleOpen(false);
+      await loadInterviews();
+    } catch (rescheduleError) {
+      toast.error(rescheduleError instanceof Error ? rescheduleError.message : "Unable to reschedule interview.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const submitCancellation = async (): Promise<void> => {
+    if (!selectedInterview || !cancelReason.trim()) {
+      toast.error("A cancellation reason is required.");
+      return;
+    }
+    setProcessing(true);
+    try {
+      await cancelInterview(selectedInterview.id, cancelReason.trim());
+      toast.success("Interview cancelled and participants notified.");
+      setCancelOpen(false);
+      setCancelReason("");
+      await loadInterviews();
+    } catch (cancelError) {
+      toast.error(cancelError instanceof Error ? cancelError.message : "Unable to cancel interview.");
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -181,6 +247,24 @@ export default function InterviewsPage() {
                         Record Outcome
                       </Button>
                     ) : null}
+
+                    {isRecruiter && slot.status !== "CANCELLED" && slot.status !== "COMPLETED" ? (
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => openReschedule(slot)}>
+                          Reschedule
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            setSelectedInterview(slot);
+                            setCancelOpen(true);
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>
@@ -217,6 +301,32 @@ export default function InterviewsPage() {
               Cancel
             </Button>
             <Button onClick={() => void submitOutcome()}>Save Outcome</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={rescheduleOpen} onOpenChange={setRescheduleOpen} title="Reschedule Interview">
+        <div className="space-y-3">
+          <Input label="Interview Date" type="date" value={interviewDate} onChange={(event) => setInterviewDate(event.target.value)} />
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Start Time" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} />
+            <Input label="End Time" type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} />
+          </div>
+          <Input label="Meeting Link" type="url" value={meetingLink} onChange={(event) => setMeetingLink(event.target.value)} />
+          <Input label="Venue" value={venue} onChange={(event) => setVenue(event.target.value)} />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setRescheduleOpen(false)}>Cancel</Button>
+            <Button onClick={() => void submitReschedule()} disabled={processing}>{processing ? "Saving..." : "Save New Schedule"}</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={cancelOpen} onOpenChange={setCancelOpen} title="Cancel Interview">
+        <div className="space-y-3">
+          <Textarea label="Cancellation Reason" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setCancelOpen(false)}>Keep Interview</Button>
+            <Button variant="destructive" onClick={() => void submitCancellation()} disabled={processing}>{processing ? "Cancelling..." : "Cancel Interview"}</Button>
           </div>
         </div>
       </Modal>

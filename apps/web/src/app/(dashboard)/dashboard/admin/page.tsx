@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowDownRight, ArrowUpRight, Search } from "lucide-react";
 import { UserRole, type PlatformAnalytics } from "@campushire/types";
-import { formatDate, getRoleLabel } from "@campushire/utils";
+import { formatDate, getRoleLabel, getStatusColor } from "@campushire/utils";
 import { Badge, Button, Card, CardContent, Input, Modal, Select, Table, TableBody, TableCell, TableHeader, TableRow, Textarea } from "@/components/ui";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
@@ -596,7 +596,3 @@ const MetricStat = ({ title, value }: { title: string; value: number }) => (
     <p className="mt-1 text-lg font-semibold text-slate-900">{value}</p>
   </div>
 );
-
-const getStatusColor = (status: string): string => {
-  return status === "ACTIVE" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800";
-};

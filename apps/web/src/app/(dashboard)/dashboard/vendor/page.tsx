@@ -26,6 +26,7 @@ import {
   getMyServiceRequests,
   getVendorStats,
   respondToServiceRequest,
+  updateServiceRequest,
   type VendorStats
 } from "@/lib/api/vendors.api";
 import { asRecord } from "@/lib/utils/dashboard";
@@ -95,6 +96,16 @@ export default function VendorDashboardPage() {
       await loadData();
     } catch (actionError) {
       toast.error(actionError instanceof Error ? actionError.message : "Unable to accept request.");
+    }
+  };
+
+  const handleStartWork = async (requestId: string): Promise<void> => {
+    try {
+      await updateServiceRequest(requestId, { status: ServiceRequestStatus.IN_PROGRESS });
+      toast.success("Work started. The requester can now track delivery progress.");
+      await loadData();
+    } catch (actionError) {
+      toast.error(actionError instanceof Error ? actionError.message : "Unable to start work.");
     }
   };
 
@@ -190,6 +201,10 @@ export default function VendorDashboardPage() {
                               Reject
                             </Button>
                           </>
+                        ) : request.status === ServiceRequestStatus.ACCEPTED ? (
+                          <Button size="sm" onClick={() => void handleStartWork(request.id)}>
+                            Start Work
+                          </Button>
                         ) : (
                           <Button
                             size="sm"

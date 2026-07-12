@@ -1,7 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ServiceRequestType, VendorType, type VendorProfile } from "@campushire/types";
+import {
+  ServiceRequestStatus,
+  ServiceRequestType,
+  UserRole,
+  VendorType,
+  type ServiceRequest,
+  type VendorProfile
+} from "@campushire/types";
+import { formatDate, getStatusColor } from "@campushire/utils";
 import { Badge, Button, Card, CardContent, Input, Modal, Select, Textarea } from "@/components/ui";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -10,11 +18,16 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import {
   createServiceRequest,
+  getMyServiceRequests,
   listVendors,
+  rateVendor,
+  updateServiceRequest,
   type CreateServiceRequestDto,
   type VendorFilters
 } from "@/lib/api/vendors.api";
 import { asArray } from "@/lib/utils/dashboard";
+import { asRecord } from "@/lib/utils/dashboard";
+import { useAuthStore } from "@/lib/store/auth.store";
 import { Building2, ClipboardPlus, MapPin, ShieldCheck, Star } from "lucide-react";
 import { toast } from "sonner";
 
@@ -60,7 +73,9 @@ const getServiceAreas = (profile: VendorProfile): string[] => {
 };
 
 export default function VendorMarketplacePage() {
+  const user = useAuthStore((state) => state.user);
   const [vendors, setVendors] = useState<VendorProfile[]>([]);
+  const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<VendorFilters>({ page: 1, limit: 24 });
@@ -69,6 +84,10 @@ export default function VendorMarketplacePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [requestForm, setRequestForm] = useState<RequestFormState>(initialRequestForm);
   const [submitting, setSubmitting] = useState(false);
+  const [editingRequest, setEditingRequest] = useState<ServiceRequest | null>(null);
+  const [ratingRequest, setRatingRequest] = useState<ServiceRequest | null>(null);
+  const [rating, setRating] = useState("5");
+  const [review, setReview] = useState("");
 
   const debouncedCity = useDebounce(searchCity, 300);
   const debouncedState = useDebounce(searchState, 300);
@@ -77,12 +96,16 @@ export default function VendorMarketplacePage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await listVendors({
-        ...filters,
-        city: debouncedCity || undefined,
-        state: debouncedState || undefined
-      });
-      setVendors(response.data ?? []);
+      const [vendorResponse, requestResponse] = await Promise.all([
+        listVendors({
+          ...filters,
+          city: debouncedCity || undefined,
+          state: debouncedState || undefined
+        }),
+        getMyServiceRequests(1, 100)
+      ]);
+      setVendors(vendorResponse.data ?? []);
+      setRequests(requestResponse.data ?? []);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load vendors.");
     } finally {
@@ -124,12 +147,57 @@ export default function VendorMarketplacePage() {
       toast.success("Service request sent to vendor.");
       setModalOpen(false);
       setRequestForm(initialRequestForm);
+      await loadVendors();
     } catch (createError) {
       toast.error(createError instanceof Error ? createError.message : "Unable to create service request.");
     } finally {
       setSubmitting(false);
     }
   };
+
+  const handleUpdateRequest = async (): Promise<void> => {
+    if (!editingRequest?.title.trim() || !editingRequest.description.trim()) {
+      toast.error("Title and description are required.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await updateServiceRequest(editingRequest.id, {
+        title: editingRequest.title.trim(),
+        description: editingRequest.description.trim(),
+        dueDate: editingRequest.dueDate ? new Date(editingRequest.dueDate).toISOString() : undefined
+      });
+      toast.success("Service request updated.");
+      setEditingRequest(null);
+      await loadVendors();
+    } catch (updateError) {
+      toast.error(updateError instanceof Error ? updateError.message : "Unable to update request.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRateVendor = async (): Promise<void> => {
+    if (!ratingRequest || !review.trim()) {
+      toast.error("Add a short review before submitting your rating.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await rateVendor(ratingRequest.id, Number(rating), review.trim());
+      toast.success("Rating submitted. Thank you for the feedback.");
+      setRatingRequest(null);
+      setRating("5");
+      setReview("");
+      await loadVendors();
+    } catch (ratingError) {
+      toast.error(ratingError instanceof Error ? ratingError.message : "Unable to submit rating.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const canRequestServices = user?.role !== UserRole.VENDOR;
 
   if (loading) return <LoadingSkeleton variant="feed" count={8} />;
   if (error) return <ErrorState message={error} onRetry={() => void loadVendors()} />;
@@ -223,16 +291,66 @@ export default function VendorMarketplacePage() {
                     </p>
                   </div>
 
-                  <Button className="w-full" onClick={() => openRequestModal(vendor.id)}>
-                    <ClipboardPlus className="mr-2 h-4 w-4" />
-                    Request Service
-                  </Button>
+                  {canRequestServices ? (
+                    <Button className="w-full" onClick={() => openRequestModal(vendor.id)}>
+                      <ClipboardPlus className="mr-2 h-4 w-4" />
+                      Request Service
+                    </Button>
+                  ) : null}
                 </CardContent>
               </Card>
             );
           })}
         </div>
       )}
+
+      {canRequestServices ? (
+        <Card>
+          <CardContent className="space-y-4 p-5">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">My Service Requests</h2>
+              <p className="text-sm text-slate-600">Track delivery, correct pending requests, and rate completed work.</p>
+            </div>
+            {requests.length === 0 ? (
+              <p className="text-sm text-slate-600">You have not requested a vendor service yet.</p>
+            ) : (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {requests.map((request) => {
+                  const payload = asRecord(request.payload);
+                  const hasRating = typeof payload.vendorRating === "number";
+                  return (
+                    <div key={request.id} className="rounded-xl border border-slate-200 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-slate-900">{request.title}</p>
+                          <p className="mt-1 text-sm text-slate-600">{request.description}</p>
+                        </div>
+                        <Badge className={getStatusColor(request.status)}>{request.status.replaceAll("_", " ")}</Badge>
+                      </div>
+                      <p className="mt-3 text-xs text-slate-500">
+                        {request.dueDate ? `Due ${formatDate(new Date(request.dueDate), "dd MMM yyyy")}` : "No deadline"}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {request.status === ServiceRequestStatus.PENDING ? (
+                          <Button size="sm" variant="outline" onClick={() => setEditingRequest(request)}>
+                            Edit Request
+                          </Button>
+                        ) : null}
+                        {request.status === ServiceRequestStatus.COMPLETED && !hasRating ? (
+                          <Button size="sm" onClick={() => setRatingRequest(request)}>
+                            <Star className="mr-1 h-4 w-4" /> Rate Vendor
+                          </Button>
+                        ) : null}
+                        {hasRating ? <span className="text-sm font-medium text-amber-600">Rated {String(payload.vendorRating)}/5</span> : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Modal
         open={modalOpen}
@@ -296,6 +414,31 @@ export default function VendorMarketplacePage() {
             <Button onClick={() => void handleCreateRequest()} disabled={submitting}>
               {submitting ? "Submitting..." : "Submit Request"}
             </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={editingRequest !== null} onOpenChange={(open) => !open && setEditingRequest(null)} title="Edit Service Request">
+        {editingRequest ? (
+          <div className="space-y-3">
+            <Input label="Title" value={editingRequest.title} onChange={(event) => setEditingRequest({ ...editingRequest, title: event.target.value })} />
+            <Textarea label="Description" value={editingRequest.description} onChange={(event) => setEditingRequest({ ...editingRequest, description: event.target.value })} />
+            <Input label="Deadline" type="date" value={editingRequest.dueDate ? new Date(editingRequest.dueDate).toISOString().slice(0, 10) : ""} onChange={(event) => setEditingRequest({ ...editingRequest, dueDate: event.target.value ? new Date(`${event.target.value}T00:00:00.000Z`) : null })} />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditingRequest(null)}>Cancel</Button>
+              <Button onClick={() => void handleUpdateRequest()} disabled={submitting}>{submitting ? "Saving..." : "Save Changes"}</Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal open={ratingRequest !== null} onOpenChange={(open) => !open && setRatingRequest(null)} title="Rate Vendor Service">
+        <div className="space-y-3">
+          <Select label="Rating" value={rating} options={[1, 2, 3, 4, 5].map((value) => ({ label: `${value} star${value === 1 ? "" : "s"}`, value: String(value) }))} onChange={(event) => setRating(event.target.value)} />
+          <Textarea label="Review" value={review} onChange={(event) => setReview(event.target.value)} placeholder="Describe service quality, turnaround, and communication." />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setRatingRequest(null)}>Cancel</Button>
+            <Button onClick={() => void handleRateVendor()} disabled={submitting}>{submitting ? "Submitting..." : "Submit Rating"}</Button>
           </div>
         </div>
       </Modal>

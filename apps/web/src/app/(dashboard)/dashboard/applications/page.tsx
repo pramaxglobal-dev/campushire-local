@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Briefcase, CalendarClock, FileText } from "lucide-react";
 import { ApplicationStatus } from "@campushire/types";
 import { formatDate, getStatusColor } from "@campushire/utils";
-import { Badge, Button, Card, CardContent } from "@/components/ui";
+import { Badge, Button, Card, CardContent, Modal } from "@/components/ui";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
@@ -54,6 +54,7 @@ export default function ApplicationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
+  const [confirmWithdrawId, setConfirmWithdrawId] = useState<string | null>(null);
 
   const loadApplications = useCallback(async () => {
     setLoading(true);
@@ -84,6 +85,7 @@ export default function ApplicationsPage() {
 
   const withdraw = async (id: string) => {
     setWithdrawingId(id);
+    setConfirmWithdrawId(null);
     try {
       await withdrawApplication(id);
       toast.success("Application withdrawn");
@@ -190,7 +192,7 @@ export default function ApplicationsPage() {
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => void withdraw(application.id)}
+                        onClick={() => setConfirmWithdrawId(application.id)}
                         disabled={withdrawingId === application.id}
                       >
                         {withdrawingId === application.id ? "Withdrawing..." : "Withdraw"}
@@ -215,6 +217,32 @@ export default function ApplicationsPage() {
           })}
         </div>
       ) : null}
+
+      <Modal
+        open={confirmWithdrawId !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmWithdrawId(null);
+        }}
+        title="Withdraw Application"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-700">
+            Are you sure you want to withdraw this application? This action cannot be undone.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setConfirmWithdrawId(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => confirmWithdrawId && void withdraw(confirmWithdrawId)}
+              disabled={withdrawingId !== null}
+            >
+              {withdrawingId ? "Withdrawing..." : "Confirm Withdraw"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

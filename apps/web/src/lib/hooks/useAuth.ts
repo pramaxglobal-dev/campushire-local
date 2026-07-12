@@ -44,9 +44,9 @@ export const useAuth = () => {
   }, [accessToken]);
 
   const login = useCallback(
-    async (dto: LoginDto) => {
+    async (dto: LoginDto, rememberMe = true) => {
       const result = await loginApi(dto);
-      setTokens(result.accessToken, result.refreshToken);
+      setTokens(result.accessToken, result.refreshToken, rememberMe);
       connectSocket(result.accessToken);
       let profile: Awaited<ReturnType<typeof getMe>>;
       try {

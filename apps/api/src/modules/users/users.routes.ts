@@ -4,12 +4,13 @@ import { authenticateJWT } from "../../middleware/auth";
 import { validate } from "../../middleware/validate";
 import {
   getActivityLogController,
+  deactivateAccountController,
   getProfileController,
   updateNotificationPreferencesController,
   updateProfileController,
   uploadAvatarController
 } from "./users.controller";
-import { ActivityQuerySchema, NotificationPreferenceSchema, UpdateProfileSchema } from "./users.schema";
+import { ActivityQuerySchema, DeactivateAccountSchema, NotificationPreferenceSchema, UpdateProfileSchema } from "./users.schema";
 
 const router = Router();
 
@@ -30,5 +31,6 @@ router.put(
   updateNotificationPreferencesController
 );
 router.get("/activity", authenticateJWT, validate({ query: ActivityQuerySchema }), getActivityLogController);
+router.delete("/account", authenticateJWT, validate({ body: DeactivateAccountSchema }), deactivateAccountController);
 
 export { router as usersRoutes };

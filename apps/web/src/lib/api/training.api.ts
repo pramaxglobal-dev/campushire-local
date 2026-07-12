@@ -39,6 +39,11 @@ export interface TrainingStats {
   completionRate: number;
 }
 
+export interface PartnerEnrollment extends CourseEnrollment {
+  user: { id: string; firstName: string; lastName: string; email: string; avatarUrl: string | null };
+  course: { id: string; title: string };
+}
+
 export interface CourseWithPartner extends Course {
   trainingPartner: TrainingPartnerProfile;
   enrollmentCount: number;
@@ -107,5 +112,10 @@ export const getPartnerCourses = async (): Promise<Course[]> => {
 
 export const getPartnerStats = async (): Promise<TrainingStats> => {
   const response = await apiClient.get("/api/training/stats");
+  return unwrapResponse(response);
+};
+
+export const getPartnerEnrollments = async (courseId?: string): Promise<PartnerEnrollment[]> => {
+  const response = await apiClient.get("/api/training/enrollments", { params: { courseId } });
   return unwrapResponse(response);
 };

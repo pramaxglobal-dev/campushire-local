@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Badge, Button, Card, CardContent, Input, Textarea } from "@/components/ui";
+import { Badge, Button, Card, CardContent, Input, Select, Textarea } from "@/components/ui";
 import { EmptyState } from "@/components/common/EmptyState";
+import { FileUpload } from "@/components/common/FileUpload";
 import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
 import { PageHeader } from "@/components/common/PageHeader";
-import { getProfile, updateProfile } from "@/lib/api/users.api";
+import { getProfile, updateProfile, uploadAvatar } from "@/lib/api/users.api";
 import { useAuthStore } from "@/lib/store/auth.store";
 import { ROUTES } from "@/lib/utils/routes";
 import { formatDate, getInitials, getRoleLabel } from "@campushire/utils";
@@ -60,6 +61,7 @@ export default function ProfilePage() {
   const [phone, setPhone] = useState("");
   const [bio, setBio] = useState("");
   const [visibility, setVisibility] = useState<ProfileVisibility>("COLLEGE_ONLY");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -168,6 +170,23 @@ export default function ProfilePage() {
     await saveSkills(next);
   };
 
+  const handleAvatarUpload = async (file: File) => {
+    setUploadingAvatar(true);
+    setError(null);
+    try {
+      const result = await uploadAvatar(file);
+      // Update profile with new avatar URL
+      const updated = { ...profile!, avatarUrl: result.avatarUrl };
+      setProfile(updated);
+      setAuthUser(updated);
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Unable to upload avatar.";
+      setError(message);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const overviewStats = useMemo(() => {
     const careerScore = profile?.studentProfile?.careerScore ?? profile?.jobSeekerProfile?.careerScore ?? 0;
     const totalApplications = profile?.candidateExperiences?.length ?? 0;
@@ -264,36 +283,62 @@ export default function ProfilePage() {
       ) : null}
 
       {activeTab === "edit" ? (
-        <Card>
-          <CardContent className="space-y-4 p-6">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Input label="First Name" value={firstName} onChange={(event) => setFirstName(event.target.value)} />
-              <Input label="Last Name" value={lastName} onChange={(event) => setLastName(event.target.value)} />
-            </div>
-            <Input label="Phone" value={phone} onChange={(event) => setPhone(event.target.value)} />
-            <Textarea label="Bio" value={bio} onChange={(event) => setBio(event.target.value)} />
-
-            <div>
-              <p className="mb-2 text-sm font-medium text-slate-700">Profile Visibility</p>
-              <div className="flex flex-wrap gap-2">
-                {(["PUBLIC", "COLLEGE_ONLY", "PRIVATE"] as ProfileVisibility[]).map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setVisibility(value)}
-                    className={`rounded-lg border px-3 py-1.5 text-sm transition ${
-                      visibility === value
-                        ? "border-accent bg-accent-50 text-accent"
-                        : "border-slate-300 bg-white text-slate-700"
-                    }`}
-                  >
-                    {value}
-                  </button>
-                ))}
+        <>
+          <Card>
+            <CardContent className="space-y-4 p-6">
+              <h2 className="text-lg font-semibold text-slate-900">Profile Picture</h2>
+              <div className="flex items-center gap-4">
+                {profile.avatarUrl ? (
+                  <img src={profile.avatarUrl} alt="Profile" className="h-20 w-20 rounded-full object-cover ring-2 ring-slate-200" />
+                ) : (
+                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 text-2xl font-bold text-slate-600">
+                    {getInitials(profile.firstName, profile.lastName)}
+                  </div>
+                )}
+                <div className="flex-1">
+                  <FileUpload
+                    accept="image/*"
+                    maxSizeMB={5}
+                    onUpload={handleAvatarUpload}
+                  />
+                  {uploadingAvatar ? <p className="mt-2 text-sm text-slate-600">Uploading...</p> : null}
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="space-y-4 p-6">
+              <h2 className="text-lg font-semibold text-slate-900">Basic Information</h2>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input label="First Name" value={firstName} onChange={(event) => setFirstName(event.target.value)} />
+                <Input label="Last Name" value={lastName} onChange={(event) => setLastName(event.target.value)} />
+              </div>
+              <Input label="Phone" value={phone} onChange={(event) => setPhone(event.target.value)} />
+              <Textarea label="Bio" value={bio} onChange={(event) => setBio(event.target.value)} />
+
+              <div>
+                <p className="mb-2 text-sm font-medium text-slate-700">Profile Visibility</p>
+                <div className="flex flex-wrap gap-2">
+                  {(["PUBLIC", "COLLEGE_ONLY", "PRIVATE"] as ProfileVisibility[]).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setVisibility(value)}
+                      className={`rounded-lg border px-3 py-1.5 text-sm transition ${
+                        visibility === value
+                          ? "border-accent bg-accent-50 text-accent"
+                          : "border-slate-300 bg-white text-slate-700"
+                      }`}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </>
       ) : null}
 
       {activeTab === "education" ? (
@@ -360,11 +405,17 @@ export default function ProfilePage() {
                     label="Skill"
                     value={newSkill}
                     onChange={(event) => setNewSkill(event.target.value)}
+                    placeholder="e.g. React, Python, Communication"
                   />
-                  <Input
+                  <Select
                     label="Level"
                     value={newSkillLevel}
                     onChange={(event) => setNewSkillLevel(event.target.value as SkillLevel)}
+                    options={[
+                      { label: "Beginner", value: SkillLevel.BEGINNER },
+                      { label: "Intermediate", value: SkillLevel.INTERMEDIATE },
+                      { label: "Advanced", value: SkillLevel.ADVANCED }
+                    ]}
                   />
                   <div className="sm:pt-7">
                     <Button type="button" onClick={() => void addSkill()} disabled={saving}>

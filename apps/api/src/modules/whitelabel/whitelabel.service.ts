@@ -134,7 +134,13 @@ export const upsertConfig = async (
 ): Promise<WhiteLabelConfig> => {
   const tenant = await getTenantOrThrow(tenantId);
 
-  const updated = await prisma.whiteLabelConfig.upsert({
+  const tenantSettings = tenant.settings && typeof tenant.settings === "object" && !Array.isArray(tenant.settings)
+    ? { ...(tenant.settings as Record<string, unknown>) }
+    : {};
+  if (dto.tagline !== undefined) tenantSettings.tagline = sanitizeInput(dto.tagline);
+
+  const [updated] = await prisma.$transaction([
+    prisma.whiteLabelConfig.upsert({
     where: {
       tenantId
     },
@@ -161,7 +167,15 @@ export const upsertConfig = async (
       showPoweredBy: dto.showPoweredBy,
       customCss: dto.customCss ? dto.customCss.trim() : null
     }
-  });
+    }),
+    prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        slug: dto.subdomain || undefined,
+        settings: tenantSettings as Prisma.InputJsonValue
+      }
+    })
+  ]);
 
   await invalidateTenantCache(tenant);
   return updated;

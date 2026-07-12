@@ -48,12 +48,9 @@ const resolveTenantId = (req: Request, requestedTenantId?: string): string => {
 };
 
 const isTenantlessSuperAdminRequest = (req: Request, requestedTenantId?: string): boolean => {
-  return Boolean(
-    req.user &&
-      req.user.role === UserRole.SUPER_ADMIN &&
-      !req.user.tenantId &&
-      !requestedTenantId
-  );
+  void req;
+  void requestedTenantId;
+  return false;
 };
 
 const buildDefaultConfig = (): WhiteLabelConfig & { tenant: Tenant } => {
@@ -124,15 +121,6 @@ export const getConfigController = async (
 ): Promise<void> => {
   try {
     const query = WhiteLabelTenantQuerySchema.parse(req.query);
-
-    if (req.user?.role === UserRole.SUPER_ADMIN && !query.tenantId && !req.user.tenantId) {
-      res.status(200).json({
-        success: true,
-        data: buildDefaultConfig(),
-        error: null
-      });
-      return;
-    }
 
     const tenantId = resolveTenantId(req, query.tenantId);
     const config = await getConfig(tenantId);

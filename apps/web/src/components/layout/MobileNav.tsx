@@ -55,10 +55,10 @@ const navByRole: Record<UserRole, Array<{ href: string; label: string; icon: Com
   ].slice(0, 5),
   SUPER_ADMIN: [
     { href: ROUTES.dashboard.admin, label: "Home", icon: Users },
-    { href: ROUTES.dashboard.admin, label: "Users", icon: Users },
+    { href: `${ROUTES.dashboard.admin}/management#tenants`, label: "Tenants", icon: Building2 },
+    { href: `${ROUTES.dashboard.admin}/management#jobs`, label: "Jobs", icon: Briefcase },
     { href: ROUTES.whitelabel, label: "Brand", icon: Building2 },
-    { href: ROUTES.dashboard.admin, label: "Stats", icon: BarChart3 },
-    { href: ROUTES.settings, label: "Settings", icon: Settings }
+    { href: `${ROUTES.dashboard.admin}/management#platform-settings`, label: "Settings", icon: Settings }
   ],
   FREELANCE_RECRUITER: [
     { href: ROUTES.dashboard.freelance, label: "Home", icon: Briefcase },

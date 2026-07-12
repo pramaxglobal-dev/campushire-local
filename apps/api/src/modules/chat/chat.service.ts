@@ -68,6 +68,9 @@ const resolveThreadContextFilter = (contextType: ChatContextType, contextId: str
   if (contextType === ChatContextType.SERVICE_REQUEST) {
     return { serviceRequestId: contextId };
   }
+  if (contextType === ChatContextType.COURSE_ENROLLMENT) {
+    return { courseEnrollmentId: contextId };
+  }
   return { collegeRecruiterConnectionId: contextId };
 };
 
@@ -171,6 +174,21 @@ const assertValidContext = async (
     return;
   }
 
+  if (contextType === ChatContextType.COURSE_ENROLLMENT) {
+    const enrollment = await prisma.courseEnrollment.findFirst({
+      where: { id: contextId, course: { tenantId } },
+      include: { course: { include: { trainingPartnerProfile: { select: { userId: true } } } } }
+    });
+    if (!enrollment) {
+      throw new ServiceError("Course enrollment context not found.", 404);
+    }
+    const users = [userAId, userBId];
+    if (!users.includes(enrollment.userId) || !users.includes(enrollment.course.trainingPartnerProfile.userId)) {
+      throw new ServiceError("Invalid course chat participants.", 403);
+    }
+    return;
+  }
+
   const referral = await prisma.freelanceReferral.findFirst({
     where: {
       id: contextId,
@@ -260,6 +278,8 @@ export const getOrCreateThread = async (
       serviceRequestId: contextType === ChatContextType.SERVICE_REQUEST ? contextId : undefined,
       collegeRecruiterConnectionId:
         contextType === ChatContextType.COLLEGE_RECRUITER ? contextId : undefined,
+      courseEnrollmentId:
+        contextType === ChatContextType.COURSE_ENROLLMENT ? contextId : undefined,
       createdByUserId: userAId,
       participantUserIds: toInputJson([userAId, userBId])
     }

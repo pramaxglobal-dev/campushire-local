@@ -19,6 +19,8 @@ import {
 } from "@/lib/api/whitelabel.api";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { toast } from "sonner";
+import { UserRole, type Tenant } from "@campushire/types";
+import { useAuthStore } from "@/lib/store/auth.store";
 
 interface FormState {
   brandName: string;
@@ -53,6 +55,10 @@ const defaultState: FormState = {
 const fontOptions = ["Inter", "Roboto", "Poppins", "Lato", "Open Sans", "Montserrat"];
 
 export default function WhiteLabelPage() {
+  const user = useAuthStore((state) => state.user);
+  const isSuperAdmin = user?.role === UserRole.SUPER_ADMIN;
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [selectedTenantId, setSelectedTenantId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -67,10 +73,17 @@ export default function WhiteLabelPage() {
     setLoading(true);
     setError(null);
     try {
-      const config = await getConfig();
+      if (isSuperAdmin && !selectedTenantId) {
+        setLoading(false);
+        return;
+      }
+      const config = await getConfig(selectedTenantId || undefined);
+      const tenantSettings = config.tenant?.settings && typeof config.tenant.settings === "object" && !Array.isArray(config.tenant.settings)
+        ? (config.tenant.settings as Record<string, unknown>)
+        : {};
       setForm({
         brandName: config.brandName ?? "CampusHire",
-        tagline: config.tenant?.name ?? "The Future of Hiring, Today",
+        tagline: typeof tenantSettings.tagline === "string" ? tenantSettings.tagline : "The Future of Hiring, Today",
         logoUrl: config.logoUrl ?? "",
         faviconUrl: "",
         primaryColor: config.primaryColor ?? "#1B3A6B",
@@ -88,7 +101,19 @@ export default function WhiteLabelPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isSuperAdmin, selectedTenantId]);
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    void listTenants({ page: 1, limit: 100 }).then((response) => {
+      const rows = response.data ?? [];
+      setTenants(rows);
+      setSelectedTenantId((current) => current || rows[0]?.id || "");
+    }).catch((tenantError) => {
+      setError(tenantError instanceof Error ? tenantError.message : "Unable to load tenants.");
+      setLoading(false);
+    });
+  }, [isSuperAdmin]);
 
   useEffect(() => {
     void load();
@@ -96,6 +121,10 @@ export default function WhiteLabelPage() {
 
   useEffect(() => {
     const check = async () => {
+      if (!isSuperAdmin) {
+        setSubdomainStatus("idle");
+        return;
+      }
       if (!debouncedSubdomain.trim()) {
         setSubdomainStatus("idle");
         return;
@@ -110,13 +139,16 @@ export default function WhiteLabelPage() {
       }
     };
     void check();
-  }, [debouncedSubdomain]);
+  }, [debouncedSubdomain, isSuperAdmin]);
 
   const onSave = async (): Promise<void> => {
     setSaving(true);
     try {
       const payload: WhiteLabelConfigDto = {
+        tenantId: selectedTenantId || undefined,
         brandName: form.brandName,
+        tagline: form.tagline,
+        subdomain: form.subdomain,
         primaryColor: form.primaryColor,
         accentColor: form.accentColor,
         fontFamily: form.fontFamily,
@@ -137,7 +169,7 @@ export default function WhiteLabelPage() {
   const onPublish = async (): Promise<void> => {
     setPublishing(true);
     try {
-      await publishConfig();
+      await publishConfig(selectedTenantId || undefined);
       setIsLive(true);
       toast.success("Branding configuration published.");
     } catch (publishError) {
@@ -150,7 +182,7 @@ export default function WhiteLabelPage() {
   const onUnpublish = async (): Promise<void> => {
     setPublishing(true);
     try {
-      await unpublishConfig();
+      await unpublishConfig(selectedTenantId || undefined);
       setIsLive(false);
       toast.success("Branding configuration unpublished.");
     } catch (publishError) {
@@ -176,8 +208,8 @@ export default function WhiteLabelPage() {
     if (subdomainStatus === "checking") return "Checking availability...";
     if (subdomainStatus === "available") return "Subdomain available";
     if (subdomainStatus === "unavailable") return "Subdomain already in use";
-    return "Availability check works for super admin access.";
-  }, [subdomainStatus]);
+    return isSuperAdmin ? "Enter a unique tenant subdomain." : "Saving updates your organization subdomain.";
+  }, [isSuperAdmin, subdomainStatus]);
 
   if (loading) {
     return <LoadingSkeleton variant="card" count={4} />;
@@ -190,6 +222,19 @@ export default function WhiteLabelPage() {
     <div className="space-y-6">
       <PageHeader title="White Label Management" subtitle="Customize tenant branding, domains, and email identity." />
 
+      {isSuperAdmin ? (
+        <Card>
+          <CardContent className="p-5">
+            <Select
+              label="Tenant"
+              value={selectedTenantId}
+              options={tenants.map((tenant) => ({ label: `${tenant.name} (${tenant.slug})`, value: tenant.id }))}
+              onChange={(event) => setSelectedTenantId(event.target.value)}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardContent className="space-y-5 p-6">
@@ -199,7 +244,7 @@ export default function WhiteLabelPage() {
                 accept="image/*"
                 maxSizeMB={5}
                 onUpload={async (file) => {
-                  const result = await uploadLogo(file);
+                  const result = await uploadLogo(file, selectedTenantId || undefined);
                   setForm((prev) => ({ ...prev, logoUrl: result.url }));
                   toast.success("Logo uploaded.");
                 }}
@@ -208,7 +253,7 @@ export default function WhiteLabelPage() {
                 accept="image/x-icon,image/png,image/svg+xml"
                 maxSizeMB={2}
                 onUpload={async (file) => {
-                  const result = await uploadFavicon(file);
+                  const result = await uploadFavicon(file, selectedTenantId || undefined);
                   setForm((prev) => ({ ...prev, faviconUrl: result.url }));
                   toast.success("Favicon uploaded.");
                 }}
@@ -369,7 +414,7 @@ export default function WhiteLabelPage() {
                 <div className="space-y-3 p-5" style={{ fontFamily: form.fontFamily }}>
                   <Input label="Email" />
                   <Input label="Password" type="password" />
-                  <Button className="w-full" style={{ backgroundColor: form.accentColor }}>
+                  <Button type="button" className="w-full" style={{ backgroundColor: form.accentColor }} disabled title="Preview only">
                     Sign In
                   </Button>
                 </div>

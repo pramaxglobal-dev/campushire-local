@@ -40,3 +40,8 @@ export const getMyApplications = async (
   });
   return unwrapResponse(response);
 };
+
+export const getApplication = async (applicationId: string): Promise<Record<string, unknown>> => {
+  const response = await apiClient.get(`/api/applications/${applicationId}`);
+  return unwrapResponse(response);
+};

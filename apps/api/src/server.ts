@@ -20,7 +20,14 @@ const shutdown = async (signal: string): Promise<void> => {
 
   io.close();
   await prisma.$disconnect();
-  await redis.quit();
+
+  try {
+    if (redis.status !== "end") {
+      await redis.quit();
+    }
+  } catch (error) {
+    logger.warn({ error }, "Redis disconnect failed (already disconnected)");
+  }
 
   logger.info("Shutdown complete");
   process.exit(0);
@@ -30,10 +37,16 @@ const start = async (): Promise<void> => {
   try {
     await prisma.$queryRaw`SELECT 1`;
 
-    if (redis.status !== "ready") {
-      await redis.connect();
+    // Try to connect to Redis, but don't block server startup if it fails
+    try {
+      if (redis.status !== "ready") {
+        await redis.connect();
+      }
+      await redis.ping();
+      logger.info("Redis connected successfully");
+    } catch (redisError) {
+      logger.warn({ error: redisError }, "Redis connection failed - continuing without Redis (rate limiting disabled)");
     }
-    await redis.ping();
 
     server.listen(env.API_PORT, () => {
       logger.info({ port: env.API_PORT, env: env.NODE_ENV }, "API server started");

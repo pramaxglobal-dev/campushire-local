@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { ApplicationStatus } from "@campushire/types";
+import { useRouter } from "expo-router";
 import { Header } from "@/components/layout/Header";
 import { ApplicationCard } from "@/components/applications/ApplicationCard";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -19,6 +20,7 @@ const statusTabs: Array<{ label: string; value?: ApplicationStatus }> = [
 ];
 
 export default function ApplicationsTab() {
+  const router = useRouter();
   const [status, setStatus] = useState<ApplicationStatus | undefined>(undefined);
   const [items, setItems] = useState<AppCard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +76,7 @@ export default function ApplicationsTab() {
           contentContainerStyle={styles.list}
           data={items}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <ApplicationCard item={item} />}
+          renderItem={({ item }) => <ApplicationCard item={item} onPress={(id) => router.push({ pathname: "/applications/[id]", params: { id } })} />}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           ListEmptyComponent={<Text style={styles.empty}>No applications for this filter.</Text>}
           refreshControl={

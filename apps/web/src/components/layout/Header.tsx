@@ -1,17 +1,28 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { Input, Button } from "@/components/ui";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { NotificationBell } from "@/components/common/NotificationBell";
 import { useTenant } from "@/lib/hooks/useTenant";
+import { ROUTES } from "@/lib/utils/routes";
 
 export const Header = () => {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, logout } = useAuth();
   const { tenant } = useTenant();
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const handleSearch = (event: React.FormEvent) => {
+    event.preventDefault();
+    const query = searchQuery.trim();
+    if (!query) return;
+    router.push(`${ROUTES.jobs.list}?search=${encodeURIComponent(query)}`);
+  };
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -23,12 +34,18 @@ export const Header = () => {
           </span>
         </Link>
 
-        <div className="hidden flex-1 md:block">
+        <form onSubmit={handleSearch} className="hidden flex-1 md:block">
           <div className="relative max-w-xl">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input aria-label="Search jobs, companies" className="pl-9" />
+            <Input
+              aria-label="Search jobs, companies"
+              className="pl-9"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search jobs, companies..."
+            />
           </div>
-        </div>
+        </form>
 
         <div className="ml-auto flex items-center gap-2">
           <NotificationBell />
