@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { prisma } from "../../lib/prisma";
 import {
   AdminUserFilterSchema,
   BroadcastSchema,
@@ -6,7 +7,9 @@ import {
   ReasonSchema,
   SettingKeyParamSchema,
   UpdatePlatformSettingSchema,
-  UserIdParamSchema
+  UserIdParamSchema,
+  BulkApproveStudentsSchema,
+  CohortDashboardFilterSchema
 } from "./admin.schema";
 import {
   approveUser,
@@ -22,7 +25,10 @@ import {
   suspendUser,
   toggleFeatureFlag,
   unsuspendUser,
-  updatePlatformSetting
+  updatePlatformSetting,
+  bulkApproveStudents,
+  getCohortDashboardStats,
+  getCohortDashboardStudents
 } from "./admin.service";
 
 class ControllerError extends Error {
@@ -106,6 +112,7 @@ export const rejectUserController = async (
     const body = ReasonSchema.parse(req.body);
     const adminId = requireAdminId(req);
 
+
     const user = await rejectUser(params.id, adminId, body.reason);
 
     res.status(200).json({
@@ -127,6 +134,7 @@ export const suspendUserController = async (
     const params = UserIdParamSchema.parse(req.params);
     const body = ReasonSchema.parse(req.body);
     const adminId = requireAdminId(req);
+
 
     const user = await suspendUser(params.id, adminId, body.reason);
 
@@ -298,6 +306,69 @@ export const broadcastNotificationController = async (
     res.status(200).json({
       success: true,
       data: { message: "Broadcast sent" },
+      error: null
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const bulkApproveStudentsController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const actorId = requireAdminId(req);
+    const { userIds } = BulkApproveStudentsSchema.parse(req.body);
+    
+    const collegeProfile = await prisma.collegeProfile.findUnique({
+      where: { adminUserId: actorId }
+    });
+    
+    if (!collegeProfile) {
+      throw new ControllerError("College profile not found for this admin", 404);
+    }
+
+    const result = await bulkApproveStudents(userIds, collegeProfile.id);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+      error: null
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCohortDashboardController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const actorId = requireAdminId(req);
+    const filters = CohortDashboardFilterSchema.parse(req.query);
+
+    const collegeProfile = await prisma.collegeProfile.findUnique({
+      where: { adminUserId: actorId }
+    });
+    
+    if (!collegeProfile) {
+      throw new ControllerError("College profile not found for this admin", 404);
+    }
+
+    const stats = await getCohortDashboardStats(collegeProfile.id, filters);
+    const students = await getCohortDashboardStudents(collegeProfile.id, filters);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        stats,
+        students: students.data
+      },
+      meta: students.meta,
       error: null
     });
   } catch (error) {

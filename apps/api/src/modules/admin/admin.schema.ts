@@ -41,3 +41,16 @@ export const BroadcastSchema = z.object({
 
 export type UserFilters = z.infer<typeof AdminUserFilterSchema>;
 export type BroadcastDto = z.infer<typeof BroadcastSchema>;
+
+export const BulkApproveStudentsSchema = z.object({
+  userIds: z.array(z.string().min(1)).min(1, "At least one user ID is required")
+});
+
+export const CohortDashboardFilterSchema = z.object({
+  batchYear: z.coerce.number().int().min(1900).optional(),
+  placementStatus: z.enum(["PLACED", "UNPLACED"]).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20)
+});
+
+export type CohortDashboardFilters = z.infer<typeof CohortDashboardFilterSchema>;

@@ -40,6 +40,7 @@ const resolveTenantId = (req: Request, requestedTenantId?: string): string => {
     throw new ControllerError("Tenant context not found.", 400);
   }
 
+  // Explicit tenant-ownership verification
   if (requestedTenantId && requestedTenantId !== actorTenantId) {
     throw new ControllerError("Forbidden tenant access.", 403);
   }

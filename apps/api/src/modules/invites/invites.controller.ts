@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { UserRole } from "@campushire/types";
+import { prisma } from "../../lib/prisma";
 import {
   CreateInviteSchema,
   InviteCodeParamSchema,
@@ -86,6 +87,19 @@ export const deactivateInviteController = async (
   try {
     const actor = requireCollegeAdmin(req);
     const params = InviteIdParamSchema.parse(req.params);
+
+    // Explicit tenant-ownership verification before mutation
+    const targetInvite = await prisma.invite.findUnique({
+      where: { id: params.id },
+      select: { tenantId: true }
+    });
+    if (!targetInvite) {
+      throw new ControllerError("Invite not found", 404);
+    }
+    if (targetInvite.tenantId !== actor.tenantId) {
+      throw new ControllerError("Forbidden tenant access.", 403);
+    }
+
     const collegeId = await getCollegeIdForAdmin(actor.userId, actor.tenantId);
     const invite = await deactivateInvite(params.id, collegeId);
 

@@ -243,6 +243,11 @@ enum CourseMode {
   HYBRID
 }
 
+enum EnrollmentSource {
+  SELF_ENROLLED
+  ADMIN_ASSIGNED
+}
+
 enum EnrollmentStatus {
   ENROLLED
   IN_PROGRESS
@@ -393,7 +398,8 @@ model User {
   documentVerificationsRequested DocumentVerification[]     @relation("verification_requester")
   documentVerificationsReviewed DocumentVerification[]      @relation("verification_reviewer")
   eventParticipants             EventParticipant[]
-  courseEnrollments             CourseEnrollment[]
+  courseEnrollments             CourseEnrollment[]          @relation("course_enrollment_user")
+  assignedEnrollments           CourseEnrollment[]          @relation("enrollment_assigner")
   userDocuments                 UserDocument[]              @relation("user_documents")
   verifiedDocuments             UserDocument[]              @relation("document_verifier")
   chatThreadsCreated            ChatThread[]                @relation("chat_thread_creator")
@@ -1244,6 +1250,8 @@ model CourseEnrollment {
   courseId        String          @map("course_id")
   userId          String          @map("user_id")
   status          EnrollmentStatus @default(ENROLLED)
+  source          EnrollmentSource @default(SELF_ENROLLED)
+  assignedByUserId String?         @map("assigned_by_user_id")
   progressPct     Int             @default(0) @map("progress_pct")
   enrolledAt      DateTime        @default(now()) @map("enrolled_at")
   completedAt     DateTime?       @map("completed_at")
@@ -1251,7 +1259,8 @@ model CourseEnrollment {
   createdAt       DateTime        @default(now()) @map("created_at")
   updatedAt       DateTime        @updatedAt @map("updated_at")
   course          Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User            @relation("course_enrollment_user", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy      User?           @relation("enrollment_assigner", fields: [assignedByUserId], references: [id], onDelete: SetNull)
   revenues        CourseRevenue[]
   chatThreads     ChatThread[]
 

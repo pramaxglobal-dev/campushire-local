@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { Prisma } from "@prisma/client";
+import { Prisma, EnrollmentSource } from "@prisma/client";
 import {
   EnrollmentStatus,
   NotificationChannel,
@@ -598,5 +598,120 @@ export const getPartnerStats = async (partnerId: string): Promise<TrainingStats>
     totalEnrollments,
     totalRevenue,
     completionRate
+  };
+};
+
+export const assignStudentsToCourse = async (
+  userIds: string[],
+  courseId: string,
+  adminUserId: string
+) => {
+  return prisma.$transaction(async (tx) => {
+    // 1. Get college profile
+    const college = await tx.collegeProfile.findUnique({
+      where: { adminUserId }
+    });
+    if (!college) throw new ServiceError("College profile not found", 403);
+
+    // 2. Get valid users
+    const students = await tx.studentProfile.findMany({
+      where: { userId: { in: userIds } },
+      select: { userId: true, collegeProfileId: true }
+    });
+
+    const validUserIds = students
+      .filter((s) => s.collegeProfileId === college.id)
+      .map((s) => s.userId);
+
+    const failedIds = userIds.filter((id) => !validUserIds.includes(id));
+
+    if (validUserIds.length === 0) {
+      return { enrolledCount: 0, failedIds };
+    }
+
+    // 3. Check existing enrollments
+    const existing = await tx.courseEnrollment.findMany({
+      where: { courseId, userId: { in: validUserIds } },
+      select: { userId: true }
+    });
+    const existingIds = existing.map(e => e.userId);
+    
+    const toEnroll = validUserIds.filter(id => !existingIds.includes(id));
+
+    if (toEnroll.length === 0) {
+      return { enrolledCount: 0, failedIds: [...failedIds, ...existingIds] };
+    }
+
+    // 4. Enroll
+    const result = await tx.courseEnrollment.createMany({
+      data: toEnroll.map(id => ({
+        courseId,
+        userId: id,
+        source: EnrollmentSource.ADMIN_ASSIGNED,
+        assignedByUserId: adminUserId,
+      })),
+      skipDuplicates: true
+    });
+
+    // 5. Trigger notifications
+    for (const uid of toEnroll) {
+      await sendNotification({
+        userId: uid,
+        type: NotificationType.SYSTEM,
+        channel: NotificationChannel.IN_APP,
+        title: "Assigned to a New Course",
+        body: "Your college has assigned you a new training course to complete.",
+      });
+    }
+
+    return { enrolledCount: result.count, failedIds };
+  });
+};
+
+export const getCourseCompletionStats = async (actor: any, courseId: string) => {
+  let collegeProfileId: string | undefined;
+
+  if (actor.role === UserRole.COLLEGE_ADMIN) {
+    const college = await prisma.collegeProfile.findUnique({
+      where: { adminUserId: actor.userId }
+    });
+    if (!college) throw new ServiceError("College profile not found", 403);
+    collegeProfileId = college.id;
+  } else if (actor.role === UserRole.TRAINING_PARTNER) {
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      include: { trainingPartnerProfile: true }
+    });
+    if (course?.trainingPartnerProfile.userId !== actor.userId) {
+      throw new ServiceError("Unauthorized", 403);
+    }
+  } else {
+    throw new ServiceError("Unauthorized role", 403);
+  }
+
+  const whereClause: Prisma.CourseEnrollmentWhereInput = {
+    courseId,
+    ...(collegeProfileId ? { user: { studentProfile: { collegeProfileId } } } : {})
+  };
+
+  const enrollments = await prisma.courseEnrollment.findMany({
+    where: whereClause,
+    select: {
+      status: true,
+      progressPct: true
+    }
+  });
+
+  const total = enrollments.length;
+  const completed = enrollments.filter(e => e.status === EnrollmentStatus.COMPLETED).length;
+  const inProgress = enrollments.filter(e => e.status === EnrollmentStatus.IN_PROGRESS).length;
+  const enrolled = enrollments.filter(e => e.status === EnrollmentStatus.ENROLLED).length;
+
+  return {
+    totalEnrollments: total,
+    completed,
+    inProgress,
+    notStarted: enrolled,
+    completionRate: total > 0 ? Number(((completed / total) * 100).toFixed(2)) : 0
   };
 };

@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { UserRole } from "@campushire/types";
+import { SubRole, UserRole } from "@campushire/types";
 import { authenticateJWT } from "../../middleware/auth";
-import { requireRole } from "../../middleware/rbac";
+import { requireRole, requireSubRole } from "../../middleware/rbac";
 import { validate } from "../../middleware/validate";
 import {
   approveUserController,
@@ -17,7 +17,9 @@ import {
   suspendUserController,
   toggleFeatureFlagController,
   unsuspendUserController,
-  updatePlatformSettingController
+  updatePlatformSettingController,
+  bulkApproveStudentsController,
+  getCohortDashboardController
 } from "./admin.controller";
 import {
   AdminUserFilterSchema,
@@ -26,11 +28,44 @@ import {
   ReasonSchema,
   SettingKeyParamSchema,
   UpdatePlatformSettingSchema,
-  UserIdParamSchema
+  UserIdParamSchema,
+  BulkApproveStudentsSchema,
+  CohortDashboardFilterSchema
 } from "./admin.schema";
 
 const router = Router();
 
+// ==========================================
+// IMPORTANT: ROUTE ORDERING
+// COLLEGE_ADMIN (TPO) routes MUST be defined ABOVE the global SUPER_ADMIN
+// middleware below. Otherwise, TPO endpoints will incorrectly return 403 
+// since TPO users are not SUPER_ADMINs.
+// ==========================================
+
+// ==========================================
+// COLLEGE_ADMIN ROUTES (TPO)
+// ==========================================
+
+router.post(
+  "/students/bulk-approve",
+  authenticateJWT,
+  requireRole(UserRole.COLLEGE_ADMIN),
+  requireSubRole(SubRole.OWNER, SubRole.ADMIN),
+  validate({ body: BulkApproveStudentsSchema }),
+  bulkApproveStudentsController
+);
+
+router.get(
+  "/cohort-dashboard",
+  authenticateJWT,
+  requireRole(UserRole.COLLEGE_ADMIN),
+  validate({ query: CohortDashboardFilterSchema }),
+  getCohortDashboardController
+);
+
+// ==========================================
+// SUPER_ADMIN ROUTES (PLATFORM)
+// ==========================================
 router.use(authenticateJWT, requireRole(UserRole.SUPER_ADMIN));
 
 router.get("/users", validate({ query: AdminUserFilterSchema }), listUsersController);
@@ -38,11 +73,13 @@ router.get("/users/:id", validate({ params: UserIdParamSchema }), getUserDetailC
 router.post("/users/:id/approve", validate({ params: UserIdParamSchema }), approveUserController);
 router.post(
   "/users/:id/reject",
+  requireSubRole(SubRole.OWNER, SubRole.ADMIN),
   validate({ params: UserIdParamSchema, body: ReasonSchema }),
   rejectUserController
 );
 router.post(
   "/users/:id/suspend",
+  requireSubRole(SubRole.OWNER, SubRole.ADMIN),
   validate({ params: UserIdParamSchema, body: ReasonSchema }),
   suspendUserController
 );

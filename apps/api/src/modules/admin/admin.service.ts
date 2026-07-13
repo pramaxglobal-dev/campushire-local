@@ -22,7 +22,7 @@ import { sendNotification } from "../../lib/notification";
 import { APPROVAL_REQUIRED_ROLES } from "../../lib/user-guards";
 import { FULL_USER_INCLUDE, SAFE_USER_SELECT, type FullUserWithRelations } from "../../lib/user-selects";
 import type { SafeUser } from "../auth/auth.service";
-import type { BroadcastDto, UserFilters } from "./admin.schema";
+import type { BroadcastDto, UserFilters, CohortDashboardFilters } from "./admin.schema";
 
 class ServiceError extends Error {
   statusCode: number;
@@ -617,4 +617,144 @@ export const broadcastNotification = async (
       count: users.length
     }
   });
+};
+
+export const bulkApproveStudents = async (
+  userIds: string[],
+  collegeProfileId: string
+): Promise<{ approvedCount: number; failedIds: string[] }> => {
+  return prisma.$transaction(async (tx) => {
+    const students = await tx.studentProfile.findMany({
+      where: { userId: { in: userIds } },
+      select: { userId: true, collegeProfileId: true }
+    });
+
+    const validUserIds = students
+      .filter((s) => s.collegeProfileId === collegeProfileId)
+      .map((s) => s.userId);
+
+    if (validUserIds.length === 0) {
+      return { approvedCount: 0, failedIds: userIds };
+    }
+
+    const failedIds = userIds.filter((id) => !validUserIds.includes(id));
+
+    const result = await tx.user.updateMany({
+      where: { id: { in: validUserIds } },
+      data: { isApproved: true, isActive: true }
+    });
+
+    // Defense-in-depth: Runtime guard against logic bugs in our filtering step.
+    // Prisma's updateMany on User cannot filter by relational fields (like studentProfile.collegeProfileId).
+    // So we fetch the updated users and assert they belong to the correct college.
+    const updatedStudents = await tx.studentProfile.findMany({
+      where: { userId: { in: validUserIds } },
+      select: { userId: true, collegeProfileId: true }
+    });
+    
+    const hasInvalidUpdates = updatedStudents.some(s => s.collegeProfileId !== collegeProfileId);
+    if (hasInvalidUpdates) {
+      throw new Error("CRITICAL: Attempted to approve students outside of authorized college profile. Aborting transaction.");
+    }
+
+    return { approvedCount: result.count, failedIds };
+  });
+};
+
+export const getCohortDashboardStats = async (
+  collegeProfileId: string,
+  filters: CohortDashboardFilters
+) => {
+  const studentWhere: Prisma.StudentProfileWhereInput = {
+    collegeProfileId,
+    ...(filters.batchYear ? { graduationYear: filters.batchYear } : {})
+  };
+
+  const totalStudents = await prisma.studentProfile.count({ where: studentWhere });
+
+  const placedStudentsCount = await prisma.studentProfile.count({
+    where: {
+      ...studentWhere,
+      user: { applications: { some: { status: "HIRED" } } }
+    }
+  });
+
+  const unplacedStudentsCount = totalStudents - placedStudentsCount;
+
+  const appsPerStage = await prisma.application.groupBy({
+    by: ["status"],
+    where: { candidate: { studentProfile: { collegeProfileId } } },
+    _count: true
+  });
+
+  const applicationsPerStage = appsPerStage.reduce((acc, curr) => {
+    acc[curr.status] = curr._count;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const topCompaniesRaw = await prisma.$queryRaw<{ company_name: string; count: bigint }[]>`
+    SELECT rp.company_name, COUNT(a.id) as count
+    FROM applications a
+    JOIN jobs j ON a.job_id = j.id
+    JOIN recruiter_profiles rp ON j.recruiter_profile_id = rp.id
+    JOIN users u ON a.candidate_user_id = u.id
+    JOIN student_profiles sp ON u.id = sp.user_id
+    WHERE sp.college_profile_id = ${collegeProfileId}
+      AND a.status = 'HIRED'
+    GROUP BY rp.company_name
+    ORDER BY count DESC
+    LIMIT 5
+  `;
+
+  const topRecruitingCompanies = topCompaniesRaw.map((row) => ({
+    companyName: row.company_name,
+    hiredCount: Number(row.count)
+  }));
+
+  return {
+    totalStudents,
+    placedStudents: placedStudentsCount,
+    unplacedStudents: unplacedStudentsCount,
+    applicationsPerStage,
+    topRecruitingCompanies
+  };
+};
+
+export const getCohortDashboardStudents = async (
+  collegeProfileId: string,
+  filters: CohortDashboardFilters
+) => {
+  const where: Prisma.StudentProfileWhereInput = {
+    collegeProfileId,
+    ...(filters.batchYear ? { graduationYear: filters.batchYear } : {})
+  };
+
+  if (filters.placementStatus === "PLACED") {
+    where.user = { applications: { some: { status: "HIRED" } } };
+  } else if (filters.placementStatus === "UNPLACED") {
+    where.user = { applications: { none: { status: "HIRED" } } };
+  }
+
+  const [total, students] = await prisma.$transaction([
+    prisma.studentProfile.count({ where }),
+    prisma.studentProfile.findMany({
+      where,
+      include: {
+        user: { select: { firstName: true, lastName: true, email: true, isApproved: true } }
+      },
+      skip: (filters.page - 1) * filters.limit,
+      take: filters.limit
+    })
+  ]);
+
+  return {
+    success: true,
+    data: students,
+    meta: {
+      total,
+      page: filters.page,
+      limit: filters.limit,
+      totalPages: Math.max(1, Math.ceil(total / filters.limit))
+    }
+  };
 };

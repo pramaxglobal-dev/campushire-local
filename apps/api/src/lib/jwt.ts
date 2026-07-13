@@ -27,7 +27,7 @@ const castPayload = (decoded: string | JsonWebTokenPayload): JwtPayload => {
     typeof userId !== "string" ||
     typeof role !== "string" ||
     (typeof tenantId !== "string" && tenantId !== null) ||
-    typeof subRole !== "string" ||
+    (typeof subRole !== "string" && subRole !== null && subRole !== undefined) ||
     (familyId !== undefined && familyId !== null && typeof familyId !== "string") ||
     (jti !== undefined && typeof jti !== "string")
   ) {
@@ -38,7 +38,7 @@ const castPayload = (decoded: string | JsonWebTokenPayload): JwtPayload => {
     userId,
     role: role as JwtPayload["role"],
     tenantId,
-    subRole: subRole as JwtPayload["subRole"],
+    subRole: (subRole as JwtPayload["subRole"]) ?? null,
     familyId: familyId ?? null,
     jti
   };

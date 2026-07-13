@@ -41,3 +41,7 @@ export const PartnerEnrollmentQuerySchema = z.object({
 export type CourseFilters = z.infer<typeof CourseFiltersSchema>;
 export type CreateCourseDto = z.infer<typeof CreateCourseSchema>;
 export type UpdateCourseDto = z.infer<typeof UpdateCourseSchema>;
+
+export const AssignStudentsSchema = z.object({
+  userIds: z.array(z.string().min(1)).min(1, "At least one user ID is required")
+});

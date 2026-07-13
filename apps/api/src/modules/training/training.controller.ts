@@ -6,7 +6,8 @@ import {
   CreateCourseSchema,
   PartnerEnrollmentQuerySchema,
   UpdateCourseSchema,
-  UpdateEnrollmentProgressSchema
+  UpdateEnrollmentProgressSchema,
+  AssignStudentsSchema
 } from "./training.schema";
 import {
   createCourse,
@@ -20,7 +21,9 @@ import {
   publishCourse,
   unpublishCourse,
   updateCourse,
-  updateEnrollmentProgress
+  updateEnrollmentProgress,
+  assignStudentsToCourse,
+  getCourseCompletionStats
 } from "./training.service";
 
 class ControllerError extends Error {
@@ -258,6 +261,53 @@ export const getPartnerStatsController = async (
   try {
     const actor = requireUser(req);
     const stats = await getPartnerStats(actor.userId);
+    res.status(200).json({
+      success: true,
+      data: stats,
+      error: null
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const assignStudentsController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const actor = requireUser(req);
+    const params = CourseIdParamSchema.parse(req.params);
+    const body = AssignStudentsSchema.parse(req.body);
+
+    const result = await assignStudentsToCourse(
+      body.userIds,
+      params.id,
+      actor.userId
+    );
+
+    res.status(200).json({
+      success: true,
+      data: result,
+      error: null
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCourseCompletionController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const actor = requireUser(req);
+    const params = CourseIdParamSchema.parse(req.params);
+
+    const stats = await getCourseCompletionStats(actor, params.id);
+
     res.status(200).json({
       success: true,
       data: stats,

@@ -1,8 +1,8 @@
 import { Router } from "express";
 import multer from "multer";
-import { UserRole } from "@campushire/types";
+import { SubRole, UserRole } from "@campushire/types";
 import { authenticateJWT } from "../../middleware/auth";
-import { requireRole } from "../../middleware/rbac";
+import { requireRole, requireSubRole } from "../../middleware/rbac";
 import { validate } from "../../middleware/validate";
 import {
   getConfigController,
@@ -29,13 +29,14 @@ router.use(
 );
 
 router.get("/config", validate({ query: WhiteLabelTenantQuerySchema }), getConfigController);
-router.post("/config", validate({ body: WhiteLabelConfigSchema }), upsertConfigController);
-router.post("/publish", validate({ body: PublishSchema }), publishConfigController);
-router.post("/unpublish", validate({ body: PublishSchema }), unpublishConfigController);
+router.post("/config", requireSubRole(SubRole.OWNER, SubRole.ADMIN), validate({ body: WhiteLabelConfigSchema }), upsertConfigController);
+router.post("/publish", requireSubRole(SubRole.OWNER, SubRole.ADMIN), validate({ body: PublishSchema }), publishConfigController);
+router.post("/unpublish", requireSubRole(SubRole.OWNER, SubRole.ADMIN), validate({ body: PublishSchema }), unpublishConfigController);
 router.get("/preview", validate({ query: WhiteLabelTenantQuerySchema }), getPreviewController);
-router.post("/logo", validate({ query: WhiteLabelTenantQuerySchema }), upload.single("file"), uploadLogoController);
+router.post("/logo", requireSubRole(SubRole.OWNER, SubRole.ADMIN), validate({ query: WhiteLabelTenantQuerySchema }), upload.single("file"), uploadLogoController);
 router.post(
   "/favicon",
+  requireSubRole(SubRole.OWNER, SubRole.ADMIN),
   validate({ query: WhiteLabelTenantQuerySchema }),
   upload.single("file"),
   uploadFaviconController
