@@ -137,6 +137,7 @@ describe("TPO Routes Integration", () => {
     await prisma.tenant.deleteMany({
         where: { name: "Test Tenant" }
     });
+    await prisma.$disconnect();
   });
 
   describe("GET /api/admin/cohort-dashboard", () => {

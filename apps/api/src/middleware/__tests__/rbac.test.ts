@@ -62,8 +62,25 @@ describe("requireSubRole middleware", () => {
 
     expect(mockResponse.status).not.toHaveBeenCalled();
     expect(nextFunction).toHaveBeenCalledTimes(1);
+  });
+
   it("should return 403 if req.user.subRole is undefined/null", () => {
     mockRequest.user = { subRole: undefined } as any;
+
+    const middleware = requireSubRole(SubRole.OWNER, SubRole.ADMIN);
+    middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+
+    expect(mockResponse.status).toHaveBeenCalledWith(403);
+    expect(mockResponse.json).toHaveBeenCalledWith({
+      success: false,
+      data: null,
+      error: "Forbidden"
+    });
+    expect(nextFunction).not.toHaveBeenCalled();
+  });
+
+  it("should return 403 if req.user.subRole is entirely absent (e.g., STUDENT)", () => {
+    mockRequest.user = { id: "x", role: "STUDENT" } as any;
 
     const middleware = requireSubRole(SubRole.OWNER, SubRole.ADMIN);
     middleware(mockRequest as Request, mockResponse as Response, nextFunction);

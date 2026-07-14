@@ -606,7 +606,7 @@ export const assignStudentsToCourse = async (
   courseId: string,
   adminUserId: string
 ) => {
-  return prisma.$transaction(async (tx) => {
+  const txResult = await prisma.$transaction(async (tx) => {
     // 1. Get college profile
     const college = await tx.collegeProfile.findUnique({
       where: { adminUserId }
@@ -626,7 +626,7 @@ export const assignStudentsToCourse = async (
     const failedIds = userIds.filter((id) => !validUserIds.includes(id));
 
     if (validUserIds.length === 0) {
-      return { enrolledCount: 0, failedIds };
+      return { enrolledCount: 0, failedIds, toEnroll: [] };
     }
 
     // 3. Check existing enrollments
@@ -639,7 +639,7 @@ export const assignStudentsToCourse = async (
     const toEnroll = validUserIds.filter(id => !existingIds.includes(id));
 
     if (toEnroll.length === 0) {
-      return { enrolledCount: 0, failedIds: [...failedIds, ...existingIds] };
+      return { enrolledCount: 0, failedIds: [...failedIds, ...existingIds], toEnroll: [] };
     }
 
     // 4. Enroll
@@ -653,19 +653,25 @@ export const assignStudentsToCourse = async (
       skipDuplicates: true
     });
 
-    // 5. Trigger notifications
-    for (const uid of toEnroll) {
+    return { enrolledCount: result.count, failedIds, toEnroll };
+  });
+
+  // 5. Trigger notifications outside transaction to avoid PgBouncer transaction mode deadlock
+  for (const uid of txResult.toEnroll) {
+    try {
       await sendNotification({
         userId: uid,
         type: NotificationType.SYSTEM,
-        channel: NotificationChannel.IN_APP,
+        channels: [NotificationChannel.IN_APP],
         title: "Assigned to a New Course",
         body: "Your college has assigned you a new training course to complete.",
       });
+    } catch (e) {
+      logger.error({ error: e, userId: uid }, "Failed to send course assignment notification");
     }
+  }
 
-    return { enrolledCount: result.count, failedIds };
-  });
+  return { enrolledCount: txResult.enrolledCount, failedIds: txResult.failedIds };
 };
 
 export const getCourseCompletionStats = async (actor: any, courseId: string) => {

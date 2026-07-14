@@ -13,6 +13,7 @@ const createRedisClient = (): Redis => {
     maxRetriesPerRequest: null,
     enableReadyCheck: true,
     lazyConnect: true,
+    enableOfflineQueue: false,
     retryStrategy: (attempts: number): number => {
       const delay = Math.min(attempts * 100, 3000);
       logger.warn({ attempts, delay }, "Redis reconnecting");
