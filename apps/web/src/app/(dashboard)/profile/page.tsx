@@ -10,10 +10,11 @@ import { getProfile, updateProfile, uploadAvatar } from "@/lib/api/users.api";
 import { useAuthStore } from "@/lib/store/auth.store";
 import { ROUTES } from "@/lib/utils/routes";
 import { formatDate, getInitials, getRoleLabel } from "@campushire/utils";
-import { BookOpen, Briefcase, FileText, Folder, Sparkles, UserCircle2 } from "lucide-react";
+import { BookOpen, Briefcase, FileText, Folder, Sparkles, UserCircle2, Trash } from "lucide-react";
 import { SkillLevel, type ProfileVisibility, type UserRole } from "@campushire/types";
+import { toast } from "sonner";
 
-type TabKey = "overview" | "edit" | "education" | "experience" | "skills" | "documents";
+type TabKey = "overview" | "edit" | "education" | "experience" | "skills" | "documents" | "projects";
 
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "overview", label: "Overview" },
@@ -21,7 +22,8 @@ const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "education", label: "Education" },
   { key: "experience", label: "Experience" },
   { key: "skills", label: "Skills" },
-  { key: "documents", label: "Documents" }
+  { key: "documents", label: "Documents" },
+  { key: "projects", label: "Projects" }
 ];
 
 interface SkillItem {
@@ -63,6 +65,40 @@ export default function ProfilePage() {
   const [visibility, setVisibility] = useState<ProfileVisibility>("COLLEGE_ONLY");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
+  // Job Seeker Profile fields
+  const [city, setCity] = useState("");
+  const [expectedCtcMin, setExpectedCtcMin] = useState("");
+  const [expectedCtcMax, setExpectedCtcMax] = useState("");
+  const [availableFrom, setAvailableFrom] = useState("");
+  const [isOpenToWork, setIsOpenToWork] = useState(false);
+
+  // Education Form fields
+  const [eduInstitution, setEduInstitution] = useState("");
+  const [eduDegree, setEduDegree] = useState("");
+  const [eduField, setEduField] = useState("");
+  const [eduStart, setEduStart] = useState("");
+  const [eduEnd, setEduEnd] = useState("");
+  const [eduGrade, setEduGrade] = useState("");
+  const [eduDesc, setEduDesc] = useState("");
+
+  // Experience Form fields
+  const [expCompany, setExpCompany] = useState("");
+  const [expTitle, setExpTitle] = useState("");
+  const [expType, setExpType] = useState("");
+  const [expStart, setExpStart] = useState("");
+  const [expEnd, setExpEnd] = useState("");
+  const [expIsCurrent, setExpIsCurrent] = useState(false);
+  const [expLocation, setExpLocation] = useState("");
+  const [expDesc, setExpDesc] = useState("");
+
+  // Project Form fields
+  const [projTitle, setProjTitle] = useState("");
+  const [projDesc, setProjDesc] = useState("");
+  const [projUrl, setProjUrl] = useState("");
+  const [projRepoUrl, setProjRepoUrl] = useState("");
+  const [projStart, setProjStart] = useState("");
+  const [projEnd, setProjEnd] = useState("");
+
   useEffect(() => {
     let active = true;
 
@@ -80,6 +116,15 @@ export default function ProfilePage() {
         setPhone(result.phone ?? "");
         setBio(result.bio ?? "");
         setVisibility((result.profileVisibility as ProfileVisibility) ?? "COLLEGE_ONLY");
+        if (result.jobSeekerProfile) {
+          setCity(result.jobSeekerProfile.currentCity ?? "");
+          setExpectedCtcMin(result.jobSeekerProfile.expectedCtcMin ? String(result.jobSeekerProfile.expectedCtcMin) : "");
+          setExpectedCtcMax(result.jobSeekerProfile.expectedCtcMax ? String(result.jobSeekerProfile.expectedCtcMax) : "");
+          setIsOpenToWork(Boolean(result.jobSeekerProfile.isOpenToWork));
+          if (result.jobSeekerProfile.availableFrom) {
+            setAvailableFrom(new Date(result.jobSeekerProfile.availableFrom).toISOString().slice(0, 10));
+          }
+        }
       } catch (loadError) {
         if (!active) return;
         const message = loadError instanceof Error ? loadError.message : "Unable to fetch profile.";
@@ -108,19 +153,188 @@ export default function ProfilePage() {
     setError(null);
 
     try {
-      const updated = await updateProfile({
+      const payload: any = {
         firstName,
         lastName,
         phone,
         bio,
         profileVisibility: visibility
-      });
+      };
+      if (role === "JOB_SEEKER") {
+        payload.jobSeekerProfile = {
+          currentCity: city || undefined,
+          expectedCtcMin: expectedCtcMin ? Number(expectedCtcMin) : undefined,
+          expectedCtcMax: expectedCtcMax ? Number(expectedCtcMax) : undefined,
+          availableFrom: availableFrom ? new Date(availableFrom) : undefined,
+          isOpenToWork
+        };
+      }
+      const updated = await updateProfile(payload);
 
       setProfile(updated);
       setAuthUser(updated);
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : "Unable to save profile.";
       setError(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddEducation = async () => {
+    if (!eduInstitution || !eduDegree) {
+      toast.error("Institution and Degree are required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await updateProfile({
+        candidateEducations: [
+          {
+            institution: eduInstitution,
+            degree: eduDegree,
+            fieldOfStudy: eduField || undefined,
+            startDate: eduStart ? new Date(eduStart) : undefined,
+            endDate: eduEnd ? new Date(eduEnd) : undefined,
+            grade: eduGrade || undefined,
+            description: eduDesc || undefined
+          }
+        ]
+      });
+      setProfile(updated);
+      setAuthUser(updated);
+      setEduInstitution("");
+      setEduDegree("");
+      setEduField("");
+      setEduStart("");
+      setEduEnd("");
+      setEduGrade("");
+      setEduDesc("");
+      toast.success("Education added.");
+    } catch (saveError) {
+      toast.error(saveError instanceof Error ? saveError.message : "Unable to add education.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteEducation = async (id: string) => {
+    setSaving(true);
+    try {
+      const updated = await updateProfile({
+        candidateEducations: [{ id, institution: "", degree: "", _delete: true }]
+      });
+      setProfile(updated);
+      setAuthUser(updated);
+      toast.success("Education deleted.");
+    } catch (saveError) {
+      toast.error(saveError instanceof Error ? saveError.message : "Unable to delete education.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddExperience = async () => {
+    if (!expCompany || !expTitle) {
+      toast.error("Company Name and Title are required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await updateProfile({
+        candidateExperiences: [
+          {
+            companyName: expCompany,
+            title: expTitle,
+            employmentType: expType || undefined,
+            startDate: expStart ? new Date(expStart) : undefined,
+            endDate: expEnd ? new Date(expEnd) : undefined,
+            isCurrent: expIsCurrent,
+            location: expLocation || undefined,
+            description: expDesc || undefined
+          }
+        ]
+      });
+      setProfile(updated);
+      setAuthUser(updated);
+      setExpCompany("");
+      setExpTitle("");
+      setExpType("");
+      setExpStart("");
+      setExpEnd("");
+      setExpIsCurrent(false);
+      setExpLocation("");
+      setExpDesc("");
+      toast.success("Experience added.");
+    } catch (saveError) {
+      toast.error(saveError instanceof Error ? saveError.message : "Unable to add experience.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteExperience = async (id: string) => {
+    setSaving(true);
+    try {
+      const updated = await updateProfile({
+        candidateExperiences: [{ id, companyName: "", title: "", _delete: true }]
+      });
+      setProfile(updated);
+      setAuthUser(updated);
+      toast.success("Experience deleted.");
+    } catch (saveError) {
+      toast.error(saveError instanceof Error ? saveError.message : "Unable to delete experience.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddProject = async () => {
+    if (!projTitle) {
+      toast.error("Project Title is required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await updateProfile({
+        candidateProjects: [
+          {
+            title: projTitle,
+            description: projDesc || undefined,
+            projectUrl: projUrl || undefined,
+            repositoryUrl: projRepoUrl || undefined,
+            startDate: projStart ? new Date(projStart) : undefined,
+            endDate: projEnd ? new Date(projEnd) : undefined
+          }
+        ]
+      });
+      setProfile(updated);
+      setAuthUser(updated);
+      setProjTitle("");
+      setProjDesc("");
+      setProjUrl("");
+      setProjRepoUrl("");
+      setProjStart("");
+      setProjEnd("");
+      toast.success("Project added.");
+    } catch (saveError) {
+      toast.error(saveError instanceof Error ? saveError.message : "Unable to add project.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteProject = async (id: string) => {
+    setSaving(true);
+    try {
+      const updated = await updateProfile({
+        candidateProjects: [{ id, title: "", _delete: true }]
+      });
+      setProfile(updated);
+      setAuthUser(updated);
+      toast.success("Project deleted.");
+    } catch (saveError) {
+      toast.error(saveError instanceof Error ? saveError.message : "Unable to delete project.");
     } finally {
       setSaving(false);
     }
@@ -338,61 +552,247 @@ export default function ProfilePage() {
               </div>
             </CardContent>
           </Card>
+
+          {role === "JOB_SEEKER" ? (
+            <Card>
+              <CardContent className="space-y-4 p-6">
+                <h2 className="text-lg font-semibold text-slate-900">Job Seeker Details</h2>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Input label="Current City" value={city} onChange={(event) => setCity(event.target.value)} />
+                  <Input
+                    label="Expected Salary Min (INR)"
+                    type="number"
+                    value={expectedCtcMin}
+                    onChange={(event) => setExpectedCtcMin(event.target.value)}
+                  />
+                  <Input
+                    label="Expected Salary Max (INR)"
+                    type="number"
+                    value={expectedCtcMax}
+                    onChange={(event) => setExpectedCtcMax(event.target.value)}
+                  />
+                  <Input
+                    label="Available From / Notice Period Date"
+                    type="date"
+                    value={availableFrom}
+                    onChange={(event) => setAvailableFrom(event.target.value)}
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4">
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">Open to Work</p>
+                    <p className="text-xs text-slate-500">Makes your profile visible in recruiter searches</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsOpenToWork((prev) => !prev)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      isOpenToWork ? "bg-accent" : "bg-slate-200"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        isOpenToWork ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
         </>
       ) : null}
 
       {activeTab === "education" ? (
-        <Card>
-          <CardContent className="p-6">
-            {profile.candidateEducations && profile.candidateEducations.length > 0 ? (
-              <div className="space-y-3">
-                {profile.candidateEducations.map((item) => (
-                  <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="font-semibold text-slate-900">{item.institution}</p>
-                    <p className="text-sm text-slate-600">{item.degree} {item.fieldOfStudy ? `- ${item.fieldOfStudy}` : ""}</p>
-                    <p className="text-xs text-slate-500">
-                      {item.startDate ? formatDate(new Date(item.startDate)) : "N/A"} to{" "}
-                      {item.endDate ? formatDate(new Date(item.endDate)) : "Present"}
-                    </p>
-                  </div>
-                ))}
+        <div className="space-y-6">
+          <Card>
+            <CardContent className="p-6">
+              <h2 className="mb-4 text-lg font-semibold text-slate-900">Education History</h2>
+              {profile.candidateEducations && profile.candidateEducations.length > 0 ? (
+                <div className="space-y-3">
+                  {profile.candidateEducations.map((item) => (
+                    <div key={item.id} className="flex items-start justify-between rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <div>
+                        <p className="font-semibold text-slate-900">{item.institution}</p>
+                        <p className="text-sm text-slate-600">{item.degree} {item.fieldOfStudy ? `- ${item.fieldOfStudy}` : ""}</p>
+                        {item.grade ? <p className="text-xs text-slate-500">Grade: {item.grade}</p> : null}
+                        {item.description ? <p className="mt-1 text-xs text-slate-600">{item.description}</p> : null}
+                        <p className="text-xs text-slate-500 mt-1">
+                          {item.startDate ? formatDate(new Date(item.startDate)) : "N/A"} to{" "}
+                          {item.endDate ? formatDate(new Date(item.endDate)) : "Present"}
+                        </p>
+                      </div>
+                      <Button variant="destructive" size="sm" onClick={() => void handleDeleteEducation(item.id)}>
+                        <Trash className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  icon={BookOpen}
+                  title="No education entries"
+                  description="Add your educational qualifications below."
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="space-y-4 p-6">
+              <h2 className="text-lg font-semibold text-slate-900">Add Education Entry</h2>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input label="Institution" value={eduInstitution} onChange={(event) => setEduInstitution(event.target.value)} placeholder="e.g. Stanford University" />
+                <Input label="Degree" value={eduDegree} onChange={(event) => setEduDegree(event.target.value)} placeholder="e.g. Bachelor of Science" />
+                <Input label="Field of Study" value={eduField} onChange={(event) => setEduField(event.target.value)} placeholder="e.g. Computer Science" />
+                <Input label="Grade / GPA" value={eduGrade} onChange={(event) => setEduGrade(event.target.value)} placeholder="e.g. 3.8/4.0" />
+                <Input label="Start Date" type="date" value={eduStart} onChange={(event) => setEduStart(event.target.value)} />
+                <Input label="End Date" type="date" value={eduEnd} onChange={(event) => setEduEnd(event.target.value)} />
               </div>
-            ) : (
-              <EmptyState
-                icon={BookOpen}
-                title="No education entries"
-                description="Education records will appear here when available in your account history."
-              />
-            )}
-          </CardContent>
-        </Card>
+              <Textarea label="Description / Highlights" value={eduDesc} onChange={(event) => setEduDesc(event.target.value)} placeholder="Honors, activities, etc." />
+              <div className="flex justify-end">
+                <Button onClick={() => void handleAddEducation()} disabled={saving}>
+                  Add Education
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       ) : null}
 
       {activeTab === "experience" ? (
-        <Card>
-          <CardContent className="p-6">
-            {profile.candidateExperiences && profile.candidateExperiences.length > 0 ? (
-              <div className="space-y-3">
-                {profile.candidateExperiences.map((item) => (
-                  <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="font-semibold text-slate-900">{item.companyName}</p>
-                    <p className="text-sm text-slate-600">{item.title}</p>
-                    <p className="text-xs text-slate-500">
-                      {item.startDate ? formatDate(new Date(item.startDate)) : "N/A"} to{" "}
-                      {item.endDate ? formatDate(new Date(item.endDate)) : "Present"}
-                    </p>
-                  </div>
-                ))}
+        <div className="space-y-6">
+          <Card>
+            <CardContent className="p-6">
+              <h2 className="mb-4 text-lg font-semibold text-slate-900">Work Experience</h2>
+              {profile.candidateExperiences && profile.candidateExperiences.length > 0 ? (
+                <div className="space-y-3">
+                  {profile.candidateExperiences.map((item) => (
+                    <div key={item.id} className="flex items-start justify-between rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <div>
+                        <p className="font-semibold text-slate-900">{item.companyName}</p>
+                        <p className="text-sm text-slate-600">{item.title} {item.employmentType ? `(${item.employmentType})` : ""}</p>
+                        {item.location ? <p className="text-xs text-slate-500">Location: {item.location}</p> : null}
+                        {item.description ? <p className="mt-1 text-xs text-slate-600">{item.description}</p> : null}
+                        <p className="text-xs text-slate-500 mt-1">
+                          {item.startDate ? formatDate(new Date(item.startDate)) : "N/A"} to{" "}
+                          {item.isCurrent ? "Present" : (item.endDate ? formatDate(new Date(item.endDate)) : "Present")}
+                        </p>
+                      </div>
+                      <Button variant="destructive" size="sm" onClick={() => void handleDeleteExperience(item.id)}>
+                        <Trash className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  icon={Briefcase}
+                  title="No experience entries"
+                  description="Add your professional experiences below."
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="space-y-4 p-6">
+              <h2 className="text-lg font-semibold text-slate-900">Add Experience Entry</h2>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input label="Company Name" value={expCompany} onChange={(event) => setExpCompany(event.target.value)} placeholder="e.g. Google" />
+                <Input label="Role / Title" value={expTitle} onChange={(event) => setExpTitle(event.target.value)} placeholder="e.g. Software Engineer" />
+                <Input label="Employment Type" value={expType} onChange={(event) => setExpType(event.target.value)} placeholder="e.g. Full-time, Internship" />
+                <Input label="Location" value={expLocation} onChange={(event) => setExpLocation(event.target.value)} placeholder="e.g. Mountain View, CA" />
+                <Input label="Start Date" type="date" value={expStart} onChange={(event) => setExpStart(event.target.value)} />
+                <Input label="End Date" type="date" value={expEnd} onChange={(event) => setExpEnd(event.target.value)} disabled={expIsCurrent} />
               </div>
-            ) : (
-              <EmptyState
-                icon={Briefcase}
-                title="No experience entries"
-                description="Experience entries will appear here when available in your account history."
-              />
-            )}
-          </CardContent>
-        </Card>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="expIsCurrent"
+                  checked={expIsCurrent}
+                  onChange={(event) => setExpIsCurrent(event.target.checked)}
+                  className="rounded border-slate-300 text-accent focus:ring-accent"
+                />
+                <label htmlFor="expIsCurrent" className="text-sm font-medium text-slate-700">
+                  I currently work here
+                </label>
+              </div>
+              <Textarea label="Role Description" value={expDesc} onChange={(event) => setExpDesc(event.target.value)} placeholder="Describe your key responsibilities and accomplishments." />
+              <div className="flex justify-end">
+                <Button onClick={() => void handleAddExperience()} disabled={saving}>
+                  Add Experience
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
+      {activeTab === "projects" ? (
+        <div className="space-y-6">
+          <Card>
+            <CardContent className="p-6">
+              <h2 className="mb-4 text-lg font-semibold text-slate-900">Projects Portfolio</h2>
+              {profile.candidateProjects && profile.candidateProjects.length > 0 ? (
+                <div className="space-y-3">
+                  {profile.candidateProjects.map((item) => (
+                    <div key={item.id} className="flex items-start justify-between rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <div>
+                        <p className="font-semibold text-slate-900">{item.title}</p>
+                        {item.description ? <p className="text-sm text-slate-600 mt-1">{item.description}</p> : null}
+                        <div className="flex gap-4 mt-2 text-xs">
+                          {item.projectUrl ? (
+                            <a href={item.projectUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                              Live Demo
+                            </a>
+                          ) : null}
+                          {item.repositoryUrl ? (
+                            <a href={item.repositoryUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                              Repository
+                            </a>
+                          ) : null}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-2">
+                          {item.startDate ? formatDate(new Date(item.startDate)) : "N/A"} to{" "}
+                          {item.endDate ? formatDate(new Date(item.endDate)) : "Present"}
+                        </p>
+                      </div>
+                      <Button variant="destructive" size="sm" onClick={() => void handleDeleteProject(item.id)}>
+                        <Trash className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  icon={Folder}
+                  title="No projects listed"
+                  description="Add your personal or professional projects below."
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="space-y-4 p-6">
+              <h2 className="text-lg font-semibold text-slate-900">Add Project Entry</h2>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input label="Project Title" value={projTitle} onChange={(event) => setProjTitle(event.target.value)} placeholder="e.g. Portfolio Website" />
+                <Input label="Project URL" value={projUrl} onChange={(event) => setProjUrl(event.target.value)} placeholder="https://myproject.com" />
+                <Input label="Repository URL" value={projRepoUrl} onChange={(event) => setProjRepoUrl(event.target.value)} placeholder="https://github.com/myproject" />
+                <Input label="Start Date" type="date" value={projStart} onChange={(event) => setProjStart(event.target.value)} />
+                <Input label="End Date" type="date" value={projEnd} onChange={(event) => setProjEnd(event.target.value)} />
+              </div>
+              <Textarea label="Project Description" value={projDesc} onChange={(event) => setProjDesc(event.target.value)} placeholder="Brief description of project goal and stack used." />
+              <div className="flex justify-end">
+                <Button onClick={() => void handleAddProject()} disabled={saving}>
+                  Add Project
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       ) : null}
 
       {activeTab === "skills" ? (

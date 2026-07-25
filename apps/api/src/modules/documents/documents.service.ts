@@ -8,13 +8,14 @@ import {
   ServiceRequestStatus,
   ServiceRequestType,
   VerificationStatus,
+  UserRole,
   type UserDocument
 } from "@campushire/types";
 import { prisma } from "../../lib/prisma";
 import { deleteFile, generateFileKey, getPresignedUrl, uploadFile } from "../../lib/s3";
 import { logActivity } from "../../lib/activity";
 import { sendNotification } from "../../lib/notification";
-import { resolveUserTenantIdentity as getUserWithTenant } from "../../lib/tenant";
+import { resolveExistingUserTenantOrNull as getUserTenantId } from "../../lib/tenant";
 import type { UploadDocumentDto } from "./documents.schema";
 
 class ServiceError extends Error {
@@ -89,7 +90,7 @@ export const uploadDocument = async (
   file: Express.Multer.File,
   dto: UploadDocumentDto
 ): Promise<UserDocument> => {
-  const actor = await getUserWithTenant(userId);
+  const tenantId = await getUserTenantId(userId);
 
   if (!allowedMimeTypes.has(file.mimetype)) {
     throw new ServiceError("Invalid file type. Allowed: PDF, JPG, PNG, DOCX.", 400);
@@ -110,7 +111,7 @@ export const uploadDocument = async (
   const document = await prisma.userDocument.create({
     data: {
       userId,
-      tenantId: actor.tenantId,
+      tenantId,
       documentType: dto.documentType,
       fileUrl: presignedUrl,
       fileKey: key,
@@ -124,9 +125,27 @@ export const uploadDocument = async (
     }
   });
 
+  if (dto.documentType === "RESUME") {
+    const userWithRole = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true }
+    });
+    if (userWithRole?.role === UserRole.STUDENT) {
+      await prisma.studentProfile.updateMany({
+        where: { userId },
+        data: { resumeUrl: presignedUrl }
+      });
+    } else if (userWithRole?.role === UserRole.JOB_SEEKER) {
+      await prisma.jobSeekerProfile.updateMany({
+        where: { userId },
+        data: { resumeUrl: presignedUrl }
+      });
+    }
+  }
+
   await logActivity({
     actorUserId: userId,
-    tenantId: actor.tenantId,
+    tenantId,
     action: "document.uploaded",
     entityType: "UserDocument",
     entityId: document.id,
@@ -139,11 +158,11 @@ export const uploadDocument = async (
 };
 
 export const getMyDocuments = async (userId: string): Promise<UserDocument[]> => {
-  const actor = await getUserWithTenant(userId);
+  const tenantId = await getUserTenantId(userId);
   const documents = await prisma.userDocument.findMany({
     where: {
       userId,
-      tenantId: actor.tenantId
+      tenantId
     },
     orderBy: {
       createdAt: "desc"
@@ -154,12 +173,12 @@ export const getMyDocuments = async (userId: string): Promise<UserDocument[]> =>
 };
 
 export const deleteDocument = async (documentId: string, userId: string): Promise<void> => {
-  const actor = await getUserWithTenant(userId);
+  const tenantId = await getUserTenantId(userId);
   const document = await prisma.userDocument.findFirst({
     where: {
       id: documentId,
       userId,
-      tenantId: actor.tenantId
+      tenantId
     }
   });
 
@@ -176,7 +195,7 @@ export const deleteDocument = async (documentId: string, userId: string): Promis
 
   await logActivity({
     actorUserId: userId,
-    tenantId: actor.tenantId,
+    tenantId,
     action: "document.deleted",
     entityType: "UserDocument",
     entityId: document.id
@@ -188,12 +207,12 @@ export const toggleShareWithRecruiters = async (
   userId: string,
   share: boolean
 ): Promise<UserDocument> => {
-  const actor = await getUserWithTenant(userId);
+  const tenantId = await getUserTenantId(userId);
   const document = await prisma.userDocument.findFirst({
     where: {
       id: documentId,
       userId,
-      tenantId: actor.tenantId
+      tenantId
     }
   });
 
@@ -210,7 +229,7 @@ export const toggleShareWithRecruiters = async (
 
   await logActivity({
     actorUserId: userId,
-    tenantId: actor.tenantId,
+    tenantId,
     action: "document.share_toggled",
     entityType: "UserDocument",
     entityId: updated.id,
@@ -227,12 +246,12 @@ export const requestVerification = async (
   userId: string,
   vendorId: string
 ): Promise<UserDocument> => {
-  const actor = await getUserWithTenant(userId);
+  const tenantId = await getUserTenantId(userId);
   const document = await prisma.userDocument.findFirst({
     where: {
       id: documentId,
       userId,
-      tenantId: actor.tenantId
+      tenantId
     }
   });
 
@@ -243,7 +262,7 @@ export const requestVerification = async (
   const vendor = await prisma.vendorProfile.findFirst({
     where: {
       id: vendorId,
-      tenantId: actor.tenantId,
+      tenantId,
       isActive: true
     },
     include: {
@@ -269,7 +288,7 @@ export const requestVerification = async (
 
     const serviceRequest = await tx.serviceRequest.create({
       data: {
-        tenantId: actor.tenantId,
+        tenantId,
         requesterUserId: userId,
         assignedToUserId: vendor.user.id,
         vendorProfileId: vendor.id,
@@ -310,7 +329,7 @@ export const requestVerification = async (
 
   await logActivity({
     actorUserId: userId,
-    tenantId: actor.tenantId,
+    tenantId,
     action: "document.verification_requested",
     entityType: "UserDocument",
     entityId: updatedDocument.id,
@@ -326,11 +345,11 @@ export const getSharedDocuments = async (
   candidateUserId: string,
   recruiterUserId: string
 ): Promise<UserDocument[]> => {
-  const actor = await getUserWithTenant(recruiterUserId);
+  const tenantId = await getUserTenantId(recruiterUserId);
   const recruiter = await prisma.recruiterProfile.findFirst({
     where: {
       userId: recruiterUserId,
-      tenantId: actor.tenantId
+      tenantId
     },
     select: {
       id: true
@@ -343,14 +362,14 @@ export const getSharedDocuments = async (
 
   const activeApplication = await prisma.application.findFirst({
     where: {
-      tenantId: actor.tenantId,
+      tenantId,
       candidateUserId,
       status: {
         in: activeApplicationStatuses
       },
       job: {
         createdByUserId: recruiterUserId,
-        tenantId: actor.tenantId
+        tenantId
       }
     },
     select: { id: true }
@@ -363,7 +382,7 @@ export const getSharedDocuments = async (
   const documents = await prisma.userDocument.findMany({
     where: {
       userId: candidateUserId,
-      tenantId: actor.tenantId
+      tenantId
     },
     orderBy: {
       createdAt: "desc"
@@ -375,9 +394,9 @@ export const getSharedDocuments = async (
 };
 
 export const getMyDocumentVerifications = async (userId: string) => {
-  const actor = await getUserWithTenant(userId);
+  const tenantId = await getUserTenantId(userId);
   return prisma.documentVerification.findMany({
-    where: { requesterUserId: userId, serviceRequest: { tenantId: actor.tenantId } },
+    where: { requesterUserId: userId, serviceRequest: { tenantId } },
     include: {
       vendorProfile: { select: { businessName: true } },
       serviceRequest: { select: { status: true, title: true, updatedAt: true } },

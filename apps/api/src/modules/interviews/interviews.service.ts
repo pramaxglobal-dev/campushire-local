@@ -14,7 +14,7 @@ import { formatDate } from "@campushire/utils";
 import { prisma } from "../../lib/prisma";
 import { logActivity } from "../../lib/activity";
 import { writeApplicationStatusHistory } from "../../lib/application-history";
-import { resolveUserTenant as getUserTenantId } from "../../lib/tenant";
+import { resolveExistingUserTenantOrNull as getUserTenantId } from "../../lib/tenant";
 import { notifyInterviewScheduled, sendNotification } from "../../lib/notification";
 import type {
   InterviewFilters,
@@ -349,9 +349,7 @@ export const confirmInterview = async (slotId: string, candidateUserId: string):
   const slot = await prisma.interviewSlot.findFirst({
     where: {
       id: slotId,
-      application: {
-        tenantId
-      }
+      ...(tenantId ? { application: { tenantId } } : {})
     },
     include: {
       application: true
@@ -484,9 +482,7 @@ export const getInterviewsForCandidate = async (
   return prisma.interviewSlot.findMany({
     where: {
       candidateUserId,
-      application: {
-        tenantId
-      }
+      ...(tenantId ? { application: { tenantId } } : {})
     },
     include: {
       application: {
@@ -534,9 +530,7 @@ export const getInterviewDetail = async (slotId: string, userId: string) => {
       : await prisma.interviewSlot.findFirst({
           where: {
             id: slotId,
-            application: {
-              tenantId: actor.tenantId ?? undefined
-            }
+            ...(actor.tenantId ? { application: { tenantId: actor.tenantId } } : {})
           },
           include: {
             application: {

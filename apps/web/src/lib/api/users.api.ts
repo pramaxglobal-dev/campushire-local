@@ -18,6 +18,9 @@ export interface UpdateProfileDto {
   vendorProfile?: Record<string, unknown>;
   trainingPartnerProfile?: Record<string, unknown>;
   collegeProfile?: Record<string, unknown>;
+  candidateEducations?: any[];
+  candidateExperiences?: any[];
+  candidateProjects?: any[];
 }
 
 export interface NotificationPrefDto {

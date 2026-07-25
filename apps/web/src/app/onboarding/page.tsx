@@ -261,7 +261,7 @@ export default function OnboardingPage() {
               expectedCtcMin: undefined,
               expectedCtcMax: undefined,
               preferredWorkMode: undefined,
-              availableFrom: undefined
+              availableFrom: new Date(Date.now() + noticeDays * 24 * 60 * 60 * 1000).toISOString()
             }
           };
         }

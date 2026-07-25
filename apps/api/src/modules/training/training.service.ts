@@ -16,6 +16,7 @@ import { prisma } from "../../lib/prisma";
 import { logActivity } from "../../lib/activity";
 import { sendNotification } from "../../lib/notification";
 import { resolveUserTenantContext as getUserWithTenant } from "../../lib/tenant";
+import { logger } from "../../lib/logger";
 import type { CourseFilters, CreateCourseDto, UpdateCourseDto } from "./training.schema";
 
 class ServiceError extends Error {

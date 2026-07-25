@@ -15,7 +15,8 @@
       "@campushire/utils": ["../../packages/utils/dist"],
       "@campushire/utils/*": ["../../packages/utils/dist/*"]
     },
-    "baseUrl": "."
+    "baseUrl": ".",
+    "types": ["jest", "node"]
   },
   "include": [
     "src/**/*"

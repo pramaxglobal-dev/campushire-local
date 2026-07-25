@@ -670,6 +670,7 @@ model TrainingPartnerProfile {
 model JobSeekerProfile {
   id                 String     @id @default(cuid())
   userId             String     @unique @map("user_id")
+  isOpenToWork       Boolean    @default(false) @map("is_open_to_work")
   totalExperienceMonths Int     @default(0) @map("total_experience_months")
   currentCity        String?    @map("current_city")
   preferredLocations Json?      @map("preferred_locations")

@@ -70,6 +70,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setTokens: (accessToken: string, refreshToken: string, persistent = true) => {
     writeStorage(ACCESS_KEY, accessToken, persistent);
     writeStorage(REFRESH_KEY, refreshToken, persistent);
+    setCookie("campushire_access_token", accessToken);
     set({ accessToken, refreshToken, isAuthenticated: true });
   },
   setUser: (user: FullUserProfile) => {
@@ -83,6 +84,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       window.sessionStorage.removeItem(ACCESS_KEY);
       window.sessionStorage.removeItem(REFRESH_KEY);
     }
+    removeCookie("campushire_access_token");
     removeCookie("campushire_user_role");
     removeCookie("campushire_user_approved");
     removeCookie("campushire_user_suspended");

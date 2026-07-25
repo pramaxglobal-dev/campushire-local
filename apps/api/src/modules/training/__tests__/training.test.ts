@@ -176,37 +176,35 @@ describe("Training Routes Integration", () => {
       userId: owner.id,
       tenantId: tenant.id,
       role: owner.role,
-      subRole: owner.subRole || undefined,
-      tin: owner.tin
+      subRole: owner.subRole || null
     });
 
     coordinatorToken = generateAccessToken({
       userId: coordinator.id,
       tenantId: tenant.id,
       role: coordinator.role,
-      subRole: coordinator.subRole || undefined,
-      tin: coordinator.tin
+      subRole: coordinator.subRole || null
     });
 
     partnerToken = generateAccessToken({
       userId: trainingPartner.id,
       tenantId: tenant.id,
       role: trainingPartner.role,
-      tin: trainingPartner.tin
+      subRole: null
     });
 
     otherPartnerToken = generateAccessToken({
       userId: otherPartner.id,
       tenantId: tenant.id,
       role: otherPartner.role,
-      tin: otherPartner.tin
+      subRole: null
     });
 
     studentToken = generateAccessToken({
       userId: studentUser.id,
       tenantId: tenant.id,
       role: studentUser.role,
-      tin: studentUser.tin
+      subRole: null
     });
   });
 

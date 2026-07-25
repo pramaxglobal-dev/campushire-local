@@ -120,6 +120,116 @@ export const updateProfile = async (
     });
   }
 
+  if (dto.candidateEducations) {
+    for (const edu of dto.candidateEducations) {
+      if (edu._delete && edu.id) {
+        await prisma.candidateEducation.deleteMany({
+          where: { id: edu.id, userId }
+        });
+      } else if (edu.id) {
+        await prisma.candidateEducation.updateMany({
+          where: { id: edu.id, userId },
+          data: {
+            institution: edu.institution,
+            degree: edu.degree,
+            fieldOfStudy: edu.fieldOfStudy ?? null,
+            startDate: edu.startDate ?? null,
+            endDate: edu.endDate ?? null,
+            grade: edu.grade ?? null,
+            description: edu.description ?? null
+          }
+        });
+      } else {
+        await prisma.candidateEducation.create({
+          data: {
+            userId,
+            institution: edu.institution,
+            degree: edu.degree,
+            fieldOfStudy: edu.fieldOfStudy ?? null,
+            startDate: edu.startDate ?? null,
+            endDate: edu.endDate ?? null,
+            grade: edu.grade ?? null,
+            description: edu.description ?? null
+          }
+        });
+      }
+    }
+  }
+
+  if (dto.candidateExperiences) {
+    for (const exp of dto.candidateExperiences) {
+      if (exp._delete && exp.id) {
+        await prisma.candidateExperience.deleteMany({
+          where: { id: exp.id, userId }
+        });
+      } else if (exp.id) {
+        await prisma.candidateExperience.updateMany({
+          where: { id: exp.id, userId },
+          data: {
+            companyName: exp.companyName,
+            title: exp.title,
+            employmentType: exp.employmentType ?? null,
+            startDate: exp.startDate ?? null,
+            endDate: exp.endDate ?? null,
+            isCurrent: exp.isCurrent ?? false,
+            location: exp.location ?? null,
+            description: exp.description ?? null
+          }
+        });
+      } else {
+        await prisma.candidateExperience.create({
+          data: {
+            userId,
+            companyName: exp.companyName,
+            title: exp.title,
+            employmentType: exp.employmentType ?? null,
+            startDate: exp.startDate ?? null,
+            endDate: exp.endDate ?? null,
+            isCurrent: exp.isCurrent ?? false,
+            location: exp.location ?? null,
+            description: exp.description ?? null
+          }
+        });
+      }
+    }
+  }
+
+  if (dto.candidateProjects) {
+    for (const proj of dto.candidateProjects) {
+      if (proj._delete && proj.id) {
+        await prisma.candidateProject.deleteMany({
+          where: { id: proj.id, userId }
+        });
+      } else if (proj.id) {
+        await prisma.candidateProject.updateMany({
+          where: { id: proj.id, userId },
+          data: {
+            title: proj.title,
+            description: proj.description ?? null,
+            skillsUsed: toInputJson(proj.skillsUsed) ?? null,
+            projectUrl: proj.projectUrl ?? null,
+            repositoryUrl: proj.repositoryUrl ?? null,
+            startDate: proj.startDate ?? null,
+            endDate: proj.endDate ?? null
+          }
+        });
+      } else {
+        await prisma.candidateProject.create({
+          data: {
+            userId,
+            title: proj.title,
+            description: proj.description ?? null,
+            skillsUsed: toInputJson(proj.skillsUsed) ?? null,
+            projectUrl: proj.projectUrl ?? null,
+            repositoryUrl: proj.repositoryUrl ?? null,
+            startDate: proj.startDate ?? null,
+            endDate: proj.endDate ?? null
+          }
+        });
+      }
+    }
+  }
+
   if (role === UserRole.STUDENT && dto.studentProfile) {
     const scoreProfile = dto.studentProfile as unknown as Partial<StudentProfile>;
 
@@ -166,6 +276,7 @@ export const updateProfile = async (
     } as unknown as Partial<StudentProfile>;
 
     const profileData: Prisma.JobSeekerProfileUpdateInput = {
+      isOpenToWork: dto.jobSeekerProfile.isOpenToWork,
       totalExperienceMonths: dto.jobSeekerProfile.totalExperienceMonths,
       currentCity: dto.jobSeekerProfile.currentCity,
       preferredLocations: toInputJson(dto.jobSeekerProfile.preferredLocations),

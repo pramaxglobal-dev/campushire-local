@@ -26,7 +26,21 @@ const createRedisClient = (): Redis => {
   client.on("error", (error: Error) => logger.error({ error }, "Redis error"));
   client.on("end", () => logger.warn("Redis connection ended"));
 
-  return client;
+  const safeCommands = new Set(["get", "set", "del", "keys"]);
+  return new Proxy(client, {
+    get(target, prop, receiver) {
+      if (typeof prop === "string" && safeCommands.has(prop)) {
+        if (target.status !== "ready") {
+          return async (...args: any[]) => {
+            logger.debug(`Redis not ready, skipping command: ${prop}`);
+            if (prop === "keys") return [];
+            return null;
+          };
+        }
+      }
+      return Reflect.get(target, prop, receiver);
+    }
+  }) as Redis;
 };
 
 export const redis = globalThis.__campushireRedis ?? createRedisClient();
@@ -34,3 +48,4 @@ export const redis = globalThis.__campushireRedis ?? createRedisClient();
 if (env.NODE_ENV !== "production") {
   globalThis.__campushireRedis = redis;
 }
+

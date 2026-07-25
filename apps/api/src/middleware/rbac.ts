@@ -13,6 +13,7 @@ export const requireRole = (...roles: UserRole[]) => {
     }
 
     if (!roles.includes(req.user.role)) {
+      console.log("RBAC FORBIDDEN user:", JSON.stringify(req.user), "expected roles:", JSON.stringify(roles));
       res.status(403).json({
         success: false,
         data: null,

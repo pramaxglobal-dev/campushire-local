@@ -74,6 +74,8 @@ export async function middleware(request: NextRequest) {
   const approved = request.cookies.get("campushire_user_approved")?.value === "1";
   const suspended = request.cookies.get("campushire_user_suspended")?.value === "1";
 
+  console.log("MIDDLEWARE CHECK:", pathname, { token: !!token, role, approved, suspended });
+
   if (isProtectedPath(pathname) && !token) {
     return NextResponse.redirect(withFrom(request, "/login"));
   }

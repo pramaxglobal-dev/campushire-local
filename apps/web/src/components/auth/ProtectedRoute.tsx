@@ -67,6 +67,10 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   useEffect(() => {
     if (isLoading) return;
 
+    if (isAuthenticated && !user) {
+      return;
+    }
+
     if (!isAuthenticated || !user) {
       router.replace(withRedirectPath(ROUTES.LOGIN, pathname));
       return;

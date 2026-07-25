@@ -119,6 +119,22 @@ export default function StudentDashboardPage() {
     careerScore > 70 ? "text-emerald-600" : careerScore >= 40 ? "text-amber-600" : "text-rose-600";
 
   const checklist = useMemo(() => {
+    if (user?.role === UserRole.JOB_SEEKER) {
+      const seekerProfile = user?.jobSeekerProfile;
+      const hasSkills = seekerProfile?.skills && typeof seekerProfile.skills === "object" && !Array.isArray(seekerProfile.skills) && Object.keys(seekerProfile.skills).length > 0;
+      return [
+        { label: "Full Name", done: Boolean(user?.firstName && user?.lastName), action: ROUTES.profile },
+        { label: "Phone", done: Boolean(user?.phone), action: ROUTES.profile },
+        { label: "Resume", done: Boolean(seekerProfile?.resumeUrl), action: ROUTES.profile },
+        { label: "Skills", done: Boolean(hasSkills), action: ROUTES.profile },
+        { label: "Work Experience", done: Boolean(user?.candidateExperiences?.length), action: ROUTES.profile },
+        { label: "Education", done: Boolean(user?.candidateEducations?.length), action: ROUTES.profile },
+        { label: "Projects", done: Boolean(user?.candidateProjects?.length), action: ROUTES.profile },
+        { label: "Current Location", done: Boolean(seekerProfile?.currentCity), action: ROUTES.profile },
+        { label: "Expected Salary", done: Boolean(seekerProfile?.expectedCtcMin && seekerProfile?.expectedCtcMax), action: ROUTES.profile },
+        { label: "Notice Period", done: Boolean(seekerProfile?.availableFrom), action: ROUTES.profile }
+      ];
+    }
     const studentProfile = user?.studentProfile;
     return [
       { label: "Profile Photo", done: Boolean(user?.avatarUrl), action: ROUTES.profile },
@@ -139,7 +155,7 @@ export default function StudentDashboardPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Student Dashboard"
+        title={user?.role === UserRole.JOB_SEEKER ? "Job Seeker Dashboard" : "Student Dashboard"}
         subtitle="Track readiness, discover jobs, and stay interview ready."
       />
 

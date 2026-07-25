@@ -8,6 +8,52 @@ export const UpdateProfileSchema = z.object({
   headline: z.string().trim().min(1).max(180).optional(),
   bio: z.string().trim().min(1).max(5000).optional(),
   profileVisibility: z.enum(["PUBLIC", "COLLEGE_ONLY", "PRIVATE"]).optional(),
+  candidateEducations: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        institution: z.string().trim().min(1),
+        degree: z.string().trim().min(1),
+        fieldOfStudy: z.string().trim().optional(),
+        startDate: z.coerce.date().optional(),
+        endDate: z.coerce.date().optional(),
+        grade: z.string().trim().optional(),
+        description: z.string().trim().optional(),
+        _delete: z.boolean().optional()
+      })
+    )
+    .optional(),
+  candidateExperiences: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        companyName: z.string().trim().min(1),
+        title: z.string().trim().min(1),
+        employmentType: z.string().trim().optional(),
+        startDate: z.coerce.date().optional(),
+        endDate: z.coerce.date().optional(),
+        isCurrent: z.boolean().optional(),
+        location: z.string().trim().optional(),
+        description: z.string().trim().optional(),
+        _delete: z.boolean().optional()
+      })
+    )
+    .optional(),
+  candidateProjects: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        title: z.string().trim().min(1),
+        description: z.string().trim().optional(),
+        skillsUsed: z.record(z.unknown()).or(z.array(z.unknown())).optional(),
+        projectUrl: z.string().url().optional().or(z.literal("")).or(z.null()),
+        repositoryUrl: z.string().url().optional().or(z.literal("")).or(z.null()),
+        startDate: z.coerce.date().optional(),
+        endDate: z.coerce.date().optional(),
+        _delete: z.boolean().optional()
+      })
+    )
+    .optional(),
   studentProfile: z
     .object({
       enrollmentNumber: z.string().trim().min(1).max(120).optional(),
@@ -29,6 +75,7 @@ export const UpdateProfileSchema = z.object({
     .optional(),
   jobSeekerProfile: z
     .object({
+      isOpenToWork: z.boolean().optional(),
       totalExperienceMonths: z.number().int().min(0).optional(),
       currentCity: z.string().trim().min(1).max(120).optional(),
       preferredLocations: z.array(z.string()).optional(),

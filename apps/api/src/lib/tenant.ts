@@ -72,8 +72,16 @@ export const resolveUserTenant = async (userId: string): Promise<string> => {
 export const resolveUserTenantOrNull = async (userId: string): Promise<string | null> => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { tenantId: true }
+    select: { tenantId: true, role: true }
   });
+
+  if (user && !user.tenantId) {
+    // Only JOB_SEEKER and SUPER_ADMIN are legitimately cross-tenant or tenant-less.
+    // If any other role has a null tenantId, flag it instead of silently allowing it through.
+    if (user.role !== UserRole.JOB_SEEKER && user.role !== UserRole.SUPER_ADMIN) {
+      throw new TenantResolutionError(`Tenant scope missing for role ${user.role}.`);
+    }
+  }
 
   return user?.tenantId ?? null;
 };
@@ -81,11 +89,19 @@ export const resolveUserTenantOrNull = async (userId: string): Promise<string | 
 export const resolveExistingUserTenantOrNull = async (userId: string): Promise<string | null> => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { tenantId: true }
+    select: { tenantId: true, role: true }
   });
 
   if (!user) {
     throw new TenantResolutionError("User not found.");
+  }
+
+  if (!user.tenantId) {
+    // Only JOB_SEEKER and SUPER_ADMIN are legitimately cross-tenant or tenant-less.
+    // If any other role has a null tenantId, flag it instead of silently allowing it through.
+    if (user.role !== UserRole.JOB_SEEKER && user.role !== UserRole.SUPER_ADMIN) {
+      throw new TenantResolutionError(`Tenant scope missing for role ${user.role}.`);
+    }
   }
 
   return user.tenantId ?? null;
