@@ -135,7 +135,7 @@ export const Sidebar = () => {
 
   return (
     <aside
-      className={`hidden md:flex h-screen shrink-0 flex-col bg-primary text-white transition-all duration-150 ${
+      className={`hidden md:flex sticky top-0 h-screen shrink-0 flex-col bg-primary text-white transition-all duration-150 ${
         collapsed ? "w-20" : "w-72"
       }`}
     >
@@ -149,7 +149,7 @@ export const Sidebar = () => {
         </Button>
       </div>
 
-      <nav className="flex-1 space-y-1 px-3 pb-4">
+      <nav className="flex-1 space-y-1 px-3 pb-4 overflow-y-auto">
         {navItems.map((item) => {
           const [itemPath, itemQuery] = item.href.split("?");
           const sectionFromHref = itemQuery?.startsWith("section=") ? itemQuery.slice("section=".length) : null;
