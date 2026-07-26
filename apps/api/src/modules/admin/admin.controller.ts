@@ -96,7 +96,8 @@ export const approveUserController = async (
   try {
     const params = UserIdParamSchema.parse(req.params);
     const adminId = requireAdminId(req);
-    const user = await approveUser(params.id, adminId);
+    const adminRole = req.user?.role as UserRole;
+    const user = await approveUser(params.id, adminId, adminRole);
 
     res.status(200).json({
       success: true,
@@ -117,9 +118,9 @@ export const rejectUserController = async (
     const params = UserIdParamSchema.parse(req.params);
     const body = ReasonSchema.parse(req.body);
     const adminId = requireAdminId(req);
+    const adminRole = req.user?.role as UserRole;
 
-
-    const user = await rejectUser(params.id, adminId, body.reason);
+    const user = await rejectUser(params.id, adminId, body.reason, adminRole);
 
     res.status(200).json({
       success: true,

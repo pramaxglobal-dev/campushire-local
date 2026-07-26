@@ -154,8 +154,35 @@ export const getUserDetail = async (userId: string): Promise<FullUserProfile> =>
   return user;
 };
 
-export const approveUser = async (userId: string, adminId: string): Promise<SafeUser> => {
-  const user = await requireUserById(userId);
+export const approveUser = async (
+  userId: string,
+  adminId: string,
+  adminRole?: UserRole
+): Promise<SafeUser> => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      ...SAFE_USER_SELECT,
+      studentProfile: { select: { collegeProfileId: true } }
+    }
+  });
+
+  if (!user) {
+    throw new ServiceError("User not found.", 404);
+  }
+
+  if (adminRole === UserRole.COLLEGE_ADMIN) {
+    if (user.role !== UserRole.STUDENT) {
+      throw new ServiceError("College Admins can only approve student accounts.", 403);
+    }
+    const college = await prisma.collegeProfile.findFirst({
+      where: { adminUserId: adminId },
+      select: { id: true }
+    });
+    if (!college || user.studentProfile?.collegeProfileId !== college.id) {
+      throw new ServiceError("Forbidden: You can only approve students from your own college.", 403);
+    }
+  }
 
   const updated = await prisma.user.update({
     where: { id: userId },
@@ -197,9 +224,34 @@ export const approveUser = async (userId: string, adminId: string): Promise<Safe
 export const rejectUser = async (
   userId: string,
   adminId: string,
-  reason: string
+  reason: string,
+  adminRole?: UserRole
 ): Promise<SafeUser> => {
-  const user = await requireUserById(userId);
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      ...SAFE_USER_SELECT,
+      studentProfile: { select: { collegeProfileId: true } }
+    }
+  });
+
+  if (!user) {
+    throw new ServiceError("User not found.", 404);
+  }
+
+  if (adminRole === UserRole.COLLEGE_ADMIN) {
+    if (user.role !== UserRole.STUDENT) {
+      throw new ServiceError("College Admins can only reject student accounts.", 403);
+    }
+    const college = await prisma.collegeProfile.findFirst({
+      where: { adminUserId: adminId },
+      select: { id: true }
+    });
+    if (!college || user.studentProfile?.collegeProfileId !== college.id) {
+      throw new ServiceError("Forbidden: You can only reject students from your own college.", 403);
+    }
+  }
+
   const cleanReason = sanitizeInput(reason);
 
   const updated = await prisma.user.update({
