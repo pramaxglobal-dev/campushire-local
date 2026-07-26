@@ -2,16 +2,27 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { Input, Button } from "@/components/ui";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { NotificationBell } from "@/components/common/NotificationBell";
 import { useTenant } from "@/lib/hooks/useTenant";
 import { ROUTES } from "@/lib/utils/routes";
+import { UserRole } from "@campushire/types";
+
+const ROLE_LABELS: Record<string, string> = {
+  [UserRole.COLLEGE_ADMIN]: "College Admin",
+  [UserRole.CORPORATE_RECRUITER]: "Recruiter",
+  [UserRole.STUDENT]: "Student",
+  [UserRole.JOB_SEEKER]: "Job Seeker",
+  [UserRole.SUPER_ADMIN]: "Super Admin",
+  [UserRole.FREELANCE_RECRUITER]: "Freelance",
+  [UserRole.VENDOR]: "Vendor",
+  [UserRole.TRAINING_PARTNER]: "Training Partner"
+};
 
 export const Header = () => {
-  const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
   const { tenant } = useTenant();
@@ -24,22 +35,24 @@ export const Header = () => {
     router.push(`${ROUTES.jobs.list}?search=${encodeURIComponent(query)}`);
   };
 
+  const roleDisplay = user?.role ? ROLE_LABELS[user.role] || user.role : "";
+
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
       <div className="flex items-center gap-3 px-4 py-3 md:px-6">
-        <Link href="/dashboard" className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex shrink-0 items-center gap-2">
           <img src={tenant?.logoUrl ?? "/logo.svg"} alt="Brand" className="h-8 w-8 rounded-md" />
           <span className="hidden text-sm font-bold text-slate-900 sm:block">
             {tenant?.brandName ?? "CampusHire"}
           </span>
         </Link>
 
-        <form onSubmit={handleSearch} className="hidden flex-1 md:block">
-          <div className="relative max-w-xl">
+        <form onSubmit={handleSearch} className="hidden flex-1 max-w-md md:block mx-4">
+          <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input
               aria-label="Search jobs, companies"
-              className="pl-9"
+              className="pl-9 text-sm"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search jobs, companies..."
@@ -47,23 +60,22 @@ export const Header = () => {
           </div>
         </form>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-3">
           <NotificationBell />
-          <div className="hidden items-center gap-2 sm:flex">
-            <div className="h-9 w-9 rounded-full bg-primary text-white flex items-center justify-center text-xs font-semibold">
+          <div className="hidden items-center gap-2.5 sm:flex">
+            <div className="h-9 w-9 shrink-0 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold">
               {user?.firstName?.slice(0, 1)}{user?.lastName?.slice(0, 1)}
             </div>
-            <div className="text-right">
-              <p className="text-sm font-semibold text-slate-900">{user?.firstName} {user?.lastName}</p>
-              <p className="text-xs text-slate-500">{user?.role}</p>
+            <div className="text-right max-w-[140px] truncate">
+              <p className="text-sm font-semibold text-slate-900 truncate">{user?.firstName} {user?.lastName}</p>
+              <p className="text-xs text-slate-500 font-medium truncate">{roleDisplay}</p>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={logout}>
+          <Button variant="outline" size="sm" onClick={logout} className="shrink-0">
             Sign Out
           </Button>
         </div>
       </div>
-      <div className="px-4 pb-2 text-xs text-slate-500 md:hidden">{pathname}</div>
     </header>
   );
 };
