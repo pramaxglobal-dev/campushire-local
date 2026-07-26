@@ -140,3 +140,45 @@ export const broadcastNotification = async (dto: BroadcastDto): Promise<void> =>
   const response = await apiClient.post("/api/admin/broadcast", dto);
   unwrapVoidResponse(response);
 };
+
+export interface CohortDashboardStats {
+  totalStudents: number;
+  placedStudents: number;
+  unplacedStudents: number;
+  applicationsPerStage: Record<string, number>;
+  topRecruitingCompanies: Array<{ companyName: string; hiredCount: number }>;
+}
+
+export interface CohortStudentItem {
+  id: string;
+  userId: string;
+  graduationYear: number | null;
+  department: string | null;
+  careerScore: number;
+  isProfileComplete: boolean;
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    isApproved: boolean;
+  };
+}
+
+export const getCohortDashboard = async (params?: {
+  batchYear?: number;
+  placementStatus?: "PLACED" | "UNPLACED";
+  page?: number;
+  limit?: number;
+}) => {
+  const response = await apiClient.get("/api/admin/cohort-dashboard", { params });
+  return unwrapResponse<{
+    stats: CohortDashboardStats;
+    students: PaginatedResponse<CohortStudentItem[]>;
+  }>(response);
+};
+
+export const bulkApproveStudents = async (userIds: string[]) => {
+  const response = await apiClient.post("/api/admin/students/bulk-approve", { userIds });
+  return unwrapResponse<{ approvedCount: number; failedIds: string[] }>(response);
+};

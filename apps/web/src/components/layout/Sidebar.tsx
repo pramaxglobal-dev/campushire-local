@@ -76,14 +76,14 @@ const navByRole: Record<UserRole, NavItem[]> = {
   ],
   COLLEGE_ADMIN: [
     { label: "Dashboard", href: ROUTES.dashboard.college, icon: Building2 },
-    { label: "Students", href: ROUTES.dashboard.college, icon: Users },
-    { label: "Recruiters", href: ROUTES.dashboard.college, icon: Building2 },
-    { label: "Invite Codes", href: ROUTES.dashboard.college, icon: KeyRound },
+    { label: "Students", href: "/dashboard/college/students", icon: Users },
+    { label: "Recruiters", href: "/dashboard/college/recruiters", icon: Building2 },
+    { label: "Invite Codes", href: "/dashboard/college/invite-codes", icon: KeyRound },
     { label: "Connections", href: ROUTES.connections, icon: Link2 },
     { label: "Documents", href: ROUTES.documents, icon: Folder },
     { label: "Events", href: ROUTES.events.list, icon: Calendar },
     { label: "Branding", href: ROUTES.whitelabel, icon: Building2 },
-    { label: "Analytics", href: ROUTES.dashboard.college, icon: BarChart3 },
+    { label: "Analytics", href: "/dashboard/college/analytics", icon: BarChart3 },
     { label: "Settings", href: ROUTES.settings, icon: Settings }
   ],
   SUPER_ADMIN: [
