@@ -18,7 +18,7 @@ import { generateFileKey, getPresignedUrl, uploadFile } from "../../lib/s3";
 import { logActivity } from "../../lib/activity";
 import { sendNotification } from "../../lib/notification";
 import { emitToUser } from "../../lib/socket";
-import { resolveUserTenantContext as getUserWithTenant } from "../../lib/tenant";
+import { resolveUserTenantContextOrNull as getUserWithTenant } from "../../lib/tenant";
 import type { CreateThreadDto, SendMessageDto } from "./chat.schema";
 
 class ServiceError extends Error {
@@ -75,7 +75,7 @@ const resolveThreadContextFilter = (contextType: ChatContextType, contextId: str
 };
 
 const assertValidContext = async (
-  tenantId: string,
+  tenantId: string | null,
   userAId: string,
   userBId: string,
   contextType: ChatContextType,
@@ -84,8 +84,7 @@ const assertValidContext = async (
   if (contextType === ChatContextType.APPLICATION) {
     const application = await prisma.application.findFirst({
       where: {
-        id: contextId,
-        tenantId
+        id: contextId
       },
       include: {
         job: {
@@ -113,7 +112,7 @@ const assertValidContext = async (
     const request = await prisma.serviceRequest.findFirst({
       where: {
         id: contextId,
-        tenantId
+        ...(tenantId ? { tenantId } : {})
       },
       include: {
         vendorProfile: {
@@ -144,7 +143,7 @@ const assertValidContext = async (
     const connection = await prisma.collegeRecruiterConnection.findFirst({
       where: {
         id: contextId,
-        tenantId,
+        ...(tenantId ? { tenantId } : {}),
         status: ConnectionStatus.APPROVED
       },
       include: {
@@ -176,7 +175,7 @@ const assertValidContext = async (
 
   if (contextType === ChatContextType.COURSE_ENROLLMENT) {
     const enrollment = await prisma.courseEnrollment.findFirst({
-      where: { id: contextId, course: { tenantId } },
+      where: { id: contextId, ...(tenantId ? { course: { tenantId } } : {}) },
       include: { course: { include: { trainingPartnerProfile: { select: { userId: true } } } } }
     });
     if (!enrollment) {
@@ -192,7 +191,7 @@ const assertValidContext = async (
   const referral = await prisma.freelanceReferral.findFirst({
     where: {
       id: contextId,
-      tenantId
+      ...(tenantId ? { tenantId } : {})
     },
     include: {
       recruiterProfile: {
@@ -216,11 +215,11 @@ const assertValidContext = async (
   }
 };
 
-const getThreadOrThrow = async (threadId: string, userId: string, tenantId: string) => {
+const getThreadOrThrow = async (threadId: string, userId: string, tenantId: string | null) => {
   const thread = await prisma.chatThread.findFirst({
     where: {
       id: threadId,
-      tenantId
+      ...(tenantId ? { tenantId } : {})
     }
   });
 
@@ -245,16 +244,25 @@ export const getOrCreateThread = async (
   }
 
   const [userA, userB] = await Promise.all([getUserWithTenant(userAId), getUserWithTenant(userBId)]);
-  if (userA.tenantId !== userB.tenantId) {
+  const isJobSeekerInvolved =
+    userA.role === UserRole.JOB_SEEKER ||
+    userB.role === UserRole.JOB_SEEKER ||
+    userA.role === UserRole.STUDENT ||
+    userB.role === UserRole.STUDENT ||
+    !userA.tenantId ||
+    !userB.tenantId;
+
+  if (!isJobSeekerInvolved && userA.tenantId !== userB.tenantId) {
     throw new ServiceError("Users are not in the same tenant.", 403);
   }
 
-  await assertValidContext(userA.tenantId, userAId, userBId, contextType, contextId);
+  const effectiveTenantId = userA.tenantId || userB.tenantId || null;
+  await assertValidContext(effectiveTenantId, userAId, userBId, contextType, contextId);
 
   const contextFilter = resolveThreadContextFilter(contextType, contextId);
   const candidates = await prisma.chatThread.findMany({
     where: {
-      tenantId: userA.tenantId,
+      ...(effectiveTenantId ? { tenantId: effectiveTenantId } : {}),
       contextType,
       ...contextFilter
     }
@@ -271,7 +279,7 @@ export const getOrCreateThread = async (
 
   const created = await prisma.chatThread.create({
     data: {
-      tenantId: userA.tenantId,
+      tenantId: effectiveTenantId ?? "",
       contextType,
       applicationId: contextType === ChatContextType.APPLICATION ? contextId : undefined,
       referralId: contextType === ChatContextType.REFERRAL ? contextId : undefined,
@@ -287,7 +295,7 @@ export const getOrCreateThread = async (
 
   await logActivity({
     actorUserId: userAId,
-    tenantId: userA.tenantId,
+    tenantId: effectiveTenantId ?? "",
     action: "chat.thread_created",
     entityType: "ChatThread",
     entityId: created.id,
@@ -302,9 +310,11 @@ export const getOrCreateThread = async (
 
 export const getThreads = async (userId: string): Promise<ChatThreadWithPreview[]> => {
   const actor = await getUserWithTenant(userId);
+  const isCandidateRole = actor.role === UserRole.JOB_SEEKER || actor.role === UserRole.STUDENT;
+
   const threads = await prisma.chatThread.findMany({
     where: {
-      tenantId: actor.tenantId,
+      ...(!isCandidateRole && actor.tenantId ? { tenantId: actor.tenantId } : {}),
       participantUserIds: {
         array_contains: [userId]
       }
@@ -327,8 +337,7 @@ export const getThreads = async (userId: string): Promise<ChatThreadWithPreview[
         otherUserId
           ? prisma.user.findFirst({
               where: {
-                id: otherUserId,
-                tenantId: actor.tenantId
+                id: otherUserId
               },
               select: {
                 id: true,
@@ -341,7 +350,6 @@ export const getThreads = async (userId: string): Promise<ChatThreadWithPreview[
           : Promise.resolve(null),
         prisma.chatMessage.findFirst({
           where: {
-            tenantId: actor.tenantId,
             threadId: thread.id
           },
           orderBy: {
@@ -350,7 +358,6 @@ export const getThreads = async (userId: string): Promise<ChatThreadWithPreview[
         }),
         prisma.chatMessage.count({
           where: {
-            tenantId: actor.tenantId,
             threadId: thread.id,
             senderUserId: {
               not: userId
@@ -445,7 +452,7 @@ export const sendMessage = async (
 
   const created = await prisma.chatMessage.create({
     data: {
-      tenantId: actor.tenantId,
+      tenantId: (thread.tenantId || actor.tenantId) ?? undefined,
       threadId: thread.id,
       senderUserId: senderId,
       messageType: dto.messageType,

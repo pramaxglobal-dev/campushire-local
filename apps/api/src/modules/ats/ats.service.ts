@@ -378,6 +378,15 @@ export const getApplicationsForJob = async (
     tenantId: job.tenantId,
     jobId: job.id,
     status: filters.status,
+    ...(filters.isOpenToWork !== undefined
+      ? {
+          candidate: {
+            jobSeekerProfile: {
+              isOpenToWork: filters.isOpenToWork
+            }
+          }
+        }
+      : {}),
     ...(filters.search
       ? {
           candidate: {

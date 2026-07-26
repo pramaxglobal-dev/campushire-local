@@ -130,6 +130,29 @@ export const resolveUserTenantContext = async (
   };
 };
 
+export const resolveUserTenantContextOrNull = async (
+  userId: string
+): Promise<{ id: string; tenantId: string | null; role: UserRole }> => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      tenantId: true,
+      role: true
+    }
+  });
+
+  if (!user) {
+    throw new TenantResolutionError("User not found.");
+  }
+
+  return {
+    id: user.id,
+    tenantId: user.tenantId ?? null,
+    role: user.role
+  };
+};
+
 export const resolveUserTenantIdentity = async (
   userId: string
 ): Promise<{ id: string; tenantId: string }> => {
