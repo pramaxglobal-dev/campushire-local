@@ -192,7 +192,7 @@ export const Sidebar = () => {
           ) : null}
         </div>
         {!collapsed ? (
-          <Button className="mt-3 w-full bg-white text-primary hover:bg-slate-100" onClick={logout}>
+          <Button className="mt-3 w-full bg-white text-slate-900 hover:bg-slate-100 font-semibold" onClick={logout}>
             Logout
           </Button>
         ) : null}

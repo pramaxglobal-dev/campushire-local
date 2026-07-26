@@ -22,13 +22,13 @@ export const NotificationBell = () => {
       <Button
         variant="ghost"
         size="sm"
-        className="relative"
+        className="relative text-slate-700 hover:bg-slate-100 hover:text-slate-900"
         onClick={() => setOpen((value) => !value)}
         aria-label="Open notifications"
       >
-        <Bell className="h-5 w-5" />
+        <Bell className="h-5 w-5 text-slate-700" />
         {unreadCount > 0 ? (
-          <span className="absolute -right-1 -top-1 rounded-full bg-rose-500 px-1.5 text-[10px] font-semibold text-white">
+          <span className="absolute -right-1 -top-1 rounded-full bg-rose-600 px-1.5 text-[10px] font-bold text-white">
             {countLabel}
           </span>
         ) : null}

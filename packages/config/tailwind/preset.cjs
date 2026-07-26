@@ -1,4 +1,5 @@
 const primary = {
+  DEFAULT: "#1b3a6b",
   50: "#eef4ff",
   100: "#dbe9ff",
   200: "#bdd4ff",
@@ -13,6 +14,7 @@ const primary = {
 };
 
 const accent = {
+  DEFAULT: "#0ea5e9",
   50: "#f0faff",
   100: "#dff4ff",
   200: "#b8e8ff",
