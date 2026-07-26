@@ -73,8 +73,18 @@ export const createInvite = async (
   dto: CreateInviteDto
 ): Promise<Invite> => {
   const college = await getCollegeScope(collegeId);
-  if (college.adminUserId !== createdBy) {
-    throw new ServiceError("Forbidden", 403);
+
+  const creator = await prisma.user.findUnique({
+    where: { id: createdBy },
+    select: { tenantId: true, role: true }
+  });
+
+  if (
+    !creator ||
+    creator.role !== UserRole.COLLEGE_ADMIN ||
+    (creator.tenantId && creator.tenantId !== college.tenantId)
+  ) {
+    throw new ServiceError("Forbidden: You can only generate invite codes for your own college.", 403);
   }
 
   const code = await createUniqueInviteCode();
@@ -251,13 +261,21 @@ export const getInviteStats = async (collegeId: string): Promise<InviteStats> =>
 };
 
 export const getCollegeIdForAdmin = async (adminUserId: string, tenantId: string | null): Promise<string> => {
-  const college = await prisma.collegeProfile.findFirst({
+  let college = await prisma.collegeProfile.findFirst({
     where: {
-      adminUserId,
-      tenantId: tenantId ?? undefined
+      adminUserId
     },
     select: { id: true }
   });
+
+  if (!college && tenantId) {
+    college = await prisma.collegeProfile.findFirst({
+      where: {
+        tenantId
+      },
+      select: { id: true }
+    });
+  }
 
   if (!college) {
     throw new ServiceError("College profile not found for this admin.", 404);
