@@ -63,6 +63,8 @@ export const listUsersController = async (
   }
 };
 
+import { sanitizeUserProfile } from "../../lib/college-sanitizer";
+
 export const getUserDetailController = async (
   req: Request,
   res: Response,
@@ -70,11 +72,15 @@ export const getUserDetailController = async (
 ): Promise<void> => {
   try {
     const params = UserIdParamSchema.parse(req.params);
-    const user = await getUserDetail(params.id);
+    const rawUser = await getUserDetail(params.id);
+    const data = sanitizeUserProfile(rawUser, {
+      userId: req.user?.userId ?? "",
+      role: req.user?.role as any
+    });
 
     res.status(200).json({
       success: true,
-      data: user,
+      data,
       error: null
     });
   } catch (error) {

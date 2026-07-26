@@ -35,6 +35,8 @@ const requireAuthenticatedUser = (
   };
 };
 
+import { sanitizeUserProfile } from "../../lib/college-sanitizer";
+
 export const getProfileController = async (
   req: Request,
   res: Response,
@@ -42,7 +44,8 @@ export const getProfileController = async (
 ): Promise<void> => {
   try {
     const actor = requireAuthenticatedUser(req);
-    const data = await getProfile(actor.userId, actor.tenantId);
+    const rawData = await getProfile(actor.userId, actor.tenantId);
+    const data = sanitizeUserProfile(rawData, { userId: actor.userId, role: actor.role });
 
     res.status(200).json({
       success: true,
@@ -62,7 +65,8 @@ export const updateProfileController = async (
   try {
     const actor = requireAuthenticatedUser(req);
     const dto = UpdateProfileSchema.parse(req.body);
-    const data = await updateProfile(actor.userId, actor.role, actor.tenantId, dto);
+    const rawData = await updateProfile(actor.userId, actor.role, actor.tenantId, dto);
+    const data = sanitizeUserProfile(rawData, { userId: actor.userId, role: actor.role });
 
     res.status(200).json({
       success: true,

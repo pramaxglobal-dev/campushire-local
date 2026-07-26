@@ -19,6 +19,8 @@ import {
   respondToConnection
 } from "./connections.service";
 
+import { sanitizeCollegeProfile } from "../../lib/college-sanitizer";
+
 class ControllerError extends Error {
   statusCode: number;
 
@@ -52,9 +54,13 @@ export const requestConnectionController = async (
       throw new ControllerError("Tenant scope missing.", 403);
     }
     const connection = await requestConnection(actor.userId, dto.collegeId, dto.message, actor.tenantId);
+    const data = {
+      ...connection,
+      collegeProfile: sanitizeCollegeProfile(connection.collegeProfile, { userId: actor.userId, role: actor.role })
+    };
     res.status(201).json({
       success: true,
-      data: connection,
+      data,
       error: null
     });
   } catch (error) {
@@ -90,9 +96,13 @@ export const listConnectionsController = async (
         throw new ControllerError("Tenant scope missing.", 403);
       }
       const rows = await listConnectionsForRecruiter(actor.userId, query.status, actor.tenantId);
+      const sanitizedRows = rows.map((r) => ({
+        ...r,
+        collegeProfile: sanitizeCollegeProfile(r.collegeProfile, { userId: actor.userId, role: actor.role })
+      }));
       res.status(200).json({
         success: true,
-        data: rows,
+        data: sanitizedRows,
         error: null
       });
       return;
