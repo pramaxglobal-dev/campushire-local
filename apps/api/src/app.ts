@@ -137,3 +137,5 @@ app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
 });
 
 export { app };
+// reloaded courses route
+

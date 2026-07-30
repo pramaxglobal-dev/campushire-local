@@ -25,6 +25,7 @@ import {
   sendVerificationEmail,
   sendWelcomeEmail
 } from "../../lib/mailer";
+import { notifyCollegeStaffStudentJoined } from "../../lib/notification";
 import { isUserSuspended, requiresApproval } from "../../lib/user-guards";
 import {
   SAFE_USER_SELECT,
@@ -486,7 +487,36 @@ export const register = async (dto: RegisterDto): Promise<{ user: SafeUser; mess
   });
 
   const safeUser = await fetchSafeUserById(result.userId);
-  await sendVerificationEmail(safeUser.email, result.verificationToken, safeUser.firstName);
+
+  if (dto.role === UserRole.STUDENT && result.tenantId) {
+    try {
+      const college = await prisma.collegeProfile.findFirst({
+        where: { tenantId: result.tenantId },
+        select: {
+          name: true,
+          tenant: { select: { name: true } }
+        }
+      });
+      const rawName = college?.name?.trim();
+      const isNumeric = Boolean(rawName && /^\d+$/.test(rawName));
+      const collegeName = (!rawName || isNumeric) ? (college?.tenant?.name || "your college") : rawName;
+
+      const studentUser = await prisma.user.findUnique({
+        where: { id: result.userId }
+      });
+      if (studentUser) {
+        await notifyCollegeStaffStudentJoined(studentUser, result.tenantId, collegeName);
+      }
+    } catch (err) {
+      // Safe non-blocking try/catch
+    }
+  }
+
+  try {
+    await sendVerificationEmail(safeUser.email, result.verificationToken, safeUser.firstName);
+  } catch (emailErr) {
+    // Non-blocking email fallback
+  }
 
   return {
     user: safeUser,

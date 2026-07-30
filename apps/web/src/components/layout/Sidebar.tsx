@@ -21,6 +21,7 @@ import {
   Settings,
   ToggleLeft,
   User,
+  UserCheck,
   Users
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -28,7 +29,7 @@ import { Badge, Button } from "@/components/ui";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useUIStore } from "@/lib/store/ui.store";
 import type { UserRole } from "@campushire/types";
-import { ROUTES } from "@/lib/utils/routes";
+import { ROLE_DASHBOARD_PATHS, ROUTES } from "@/lib/utils/routes";
 
 interface NavItem {
   label: string;
@@ -76,7 +77,10 @@ const navByRole: Record<UserRole, NavItem[]> = {
   ],
   COLLEGE_ADMIN: [
     { label: "Dashboard", href: ROUTES.dashboard.college, icon: Building2 },
+    { label: "College Profile", href: "/dashboard/college/profile", icon: Building2 },
+    { label: "Team", href: "/dashboard/college/team", icon: UserCheck },
     { label: "Students", href: "/dashboard/college/students", icon: Users },
+    { label: "Courses", href: "/dashboard/college/courses", icon: BookOpen },
     { label: "Recruiters", href: "/dashboard/college/recruiters", icon: Building2 },
     { label: "Invite Codes", href: "/dashboard/college/invite-codes", icon: KeyRound },
     { label: "Connections", href: ROUTES.connections, icon: Link2 },
@@ -155,9 +159,13 @@ export const Sidebar = () => {
           const sectionFromHref = itemQuery?.startsWith("section=") ? itemQuery.slice("section=".length) : null;
           const currentSection = searchParams.get("section");
           const isSectionRoute = sectionFromHref !== null;
+          const isMainDashboardHome = (Object.values(ROLE_DASHBOARD_PATHS) as string[]).includes(itemPath || "");
+
           const isActive = isSectionRoute
             ? pathname === itemPath &&
               (currentSection === sectionFromHref || (sectionFromHref === "overview" && currentSection === null))
+            : isMainDashboardHome
+            ? pathname === itemPath
             : pathname === itemPath || pathname.startsWith(`${itemPath}/`);
           const Icon = item.icon;
 

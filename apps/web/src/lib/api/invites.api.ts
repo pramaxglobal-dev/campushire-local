@@ -58,3 +58,8 @@ export const getInviteStats = async (): Promise<InviteStats> => {
   const response = await apiClient.get("/api/invites/stats");
   return unwrapResponse(response);
 };
+
+export const deleteInvitePermanent = async (id: string): Promise<{ success: boolean }> => {
+  const response = await apiClient.delete(`/api/invites/permanent/${id}`);
+  return unwrapResponse(response);
+};

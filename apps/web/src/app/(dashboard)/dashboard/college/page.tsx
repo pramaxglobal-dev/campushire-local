@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ConnectionStatus, EventType, type CollegeAnalytics, type PlacementEvent } from "@campushire/types";
 import { formatDate, getStatusColor } from "@campushire/utils";
-import { Copy, Plus } from "lucide-react";
+import { Building2, Copy, Plus } from "lucide-react";
 import { Badge, Button, Card, CardContent, Input, Modal, Select, Table, TableBody, TableCell, TableHeader, TableRow, Textarea } from "@/components/ui";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
@@ -51,6 +52,7 @@ const EMPTY_COLLEGE_ANALYTICS: CollegeAnalytics = {
 };
 
 export default function CollegeDashboardPage() {
+  const router = useRouter();
   const [invites, setInvites] = useState<InviteWithUsages[]>([]);
   const [connections, setConnections] = useState<RecruiterConnection[]>([]);
   const [events, setEvents] = useState<PlacementEvent[]>([]);
@@ -207,6 +209,12 @@ export default function CollegeDashboardPage() {
       <PageHeader
         title="College Admin Dashboard"
         subtitle="Manage invites, recruiter connections, and campus placement events."
+        actions={
+          <Button onClick={() => router.push("/dashboard/college/profile")}>
+            <Building2 className="mr-2 h-4 w-4" />
+            Edit College Profile
+          </Button>
+        }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

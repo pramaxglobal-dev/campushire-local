@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { UserRole } from "@campushire/types";
+import { SubRole, UserRole } from "@campushire/types";
 import { ActivityQuerySchema, DeactivateAccountSchema, NotificationPreferenceSchema, UpdateProfileSchema } from "./users.schema";
 import {
   deactivateAccount,
@@ -22,7 +22,7 @@ class ControllerError extends Error {
 
 const requireAuthenticatedUser = (
   req: Request
-): { userId: string; role: UserRole; tenantId: string | null } => {
+): { userId: string; role: UserRole; tenantId: string | null; subRole: SubRole | null } => {
   const user = req.user;
   if (!user) {
     throw new ControllerError("Unauthorized", 401);
@@ -31,7 +31,8 @@ const requireAuthenticatedUser = (
   return {
     userId: user.userId,
     role: user.role,
-    tenantId: user.tenantId
+    tenantId: user.tenantId,
+    subRole: user.subRole ?? null
   };
 };
 
@@ -45,7 +46,7 @@ export const getProfileController = async (
   try {
     const actor = requireAuthenticatedUser(req);
     const rawData = await getProfile(actor.userId, actor.tenantId);
-    const data = sanitizeUserProfile(rawData, { userId: actor.userId, role: actor.role });
+    const data = sanitizeUserProfile(rawData, { userId: actor.userId, role: actor.role, tenantId: actor.tenantId });
 
     res.status(200).json({
       success: true,
@@ -65,8 +66,8 @@ export const updateProfileController = async (
   try {
     const actor = requireAuthenticatedUser(req);
     const dto = UpdateProfileSchema.parse(req.body);
-    const rawData = await updateProfile(actor.userId, actor.role, actor.tenantId, dto);
-    const data = sanitizeUserProfile(rawData, { userId: actor.userId, role: actor.role });
+    const rawData = await updateProfile(actor.userId, actor.role, actor.tenantId, actor.subRole, dto);
+    const data = sanitizeUserProfile(rawData, { userId: actor.userId, role: actor.role, tenantId: actor.tenantId });
 
     res.status(200).json({
       success: true,

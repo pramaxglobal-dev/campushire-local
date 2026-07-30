@@ -15,6 +15,7 @@ import {
   PlusCircle,
   Settings,
   User,
+  UserCheck,
   Users
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -45,10 +46,9 @@ const navByRole: Record<UserRole, Array<{ href: string; label: string; icon: Com
   ],
   COLLEGE_ADMIN: [
     { href: ROUTES.dashboard.college, label: "Home", icon: Building2 },
-    { href: ROUTES.dashboard.college, label: "Students", icon: Users },
+    { href: "/dashboard/college/team", label: "Team", icon: UserCheck },
+    { href: "/dashboard/college/students", label: "Students", icon: Users },
     { href: ROUTES.connections, label: "Connect", icon: Building2 },
-    { href: ROUTES.documents, label: "Docs", icon: Folder },
-    { href: ROUTES.events.list, label: "Events", icon: Calendar },
     { href: ROUTES.chat, label: "Chat", icon: MessageCircle },
     { href: ROUTES.whitelabel, label: "Brand", icon: Settings },
     { href: ROUTES.settings, label: "Settings", icon: Settings }
@@ -94,11 +94,12 @@ export const MobileNav = () => {
     <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white md:hidden">
       <div className="grid grid-cols-5">
         {items.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const isDashboardRoot = (Object.values(ROUTES.dashboard) as string[]).includes(item.href || "");
+          const active = isDashboardRoot ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
           return (
             <Link
-              key={item.href}
+              key={`${item.label}-${item.href}`}
               href={item.href}
               className={`flex flex-col items-center justify-center py-2 text-[11px] ${
                 active ? "text-accent" : "text-slate-500"

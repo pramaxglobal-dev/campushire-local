@@ -3,6 +3,7 @@ import { UserRole } from "@campushire/types";
 export interface RequesterInfo {
   userId: string;
   role: UserRole;
+  tenantId?: string | null;
 }
 
 export const maskEmail = (email: string | null | undefined): string | null => {
@@ -27,7 +28,7 @@ export const maskPhone = (phone: string | null | undefined): string | null => {
 
 /**
  * Sanitizes a CollegeProfile object by masking placementEmail and placementPhone
- * unless the requester is a SUPER_ADMIN or the college's own admin user.
+ * unless the requester is a SUPER_ADMIN, the college's own admin user, or belongs to the same college tenant.
  */
 export function sanitizeCollegeProfile<T extends Record<string, any>>(
   college: T | null | undefined,
@@ -36,13 +37,16 @@ export function sanitizeCollegeProfile<T extends Record<string, any>>(
   if (!college) return college;
 
   const isSuperAdmin = requester?.role === UserRole.SUPER_ADMIN;
-  const isOwnCollege = Boolean(requester?.userId && college.adminUserId === requester.userId);
+  const isOwnCollegeAdmin = Boolean(requester?.userId && college.adminUserId === requester.userId);
+  const isSameCollegeTenant = Boolean(
+    requester?.tenantId && college.tenantId && requester.tenantId === college.tenantId
+  );
 
-  if (isSuperAdmin || isOwnCollege) {
+  if (isSuperAdmin || isOwnCollegeAdmin || isSameCollegeTenant) {
     return college;
   }
 
-  const copy = { ...college };
+  const copy: any = { ...college };
   if ("placementEmail" in copy && copy.placementEmail) {
     copy.placementEmail = maskEmail(copy.placementEmail as string);
   }
@@ -62,7 +66,7 @@ export function sanitizeCollegeProfile<T extends Record<string, any>>(
 
 /**
  * Sanitizes a User object (e.g. FullUserProfile) by masking email/phone and collegeProfileManaged
- * if the user is a COLLEGE_ADMIN and the requester is NOT SUPER_ADMIN and NOT the user themselves.
+ * if the requester is NOT SUPER_ADMIN, NOT the user themselves, and NOT from the same tenant.
  */
 export function sanitizeUserProfile<T extends Record<string, any>>(
   user: T | null | undefined,
@@ -72,12 +76,15 @@ export function sanitizeUserProfile<T extends Record<string, any>>(
 
   const isSuperAdmin = requester?.role === UserRole.SUPER_ADMIN;
   const isSelf = Boolean(requester?.userId && user.id === requester.userId);
+  const isSameCollegeTenant = Boolean(
+    requester?.tenantId && user.tenantId && requester.tenantId === user.tenantId
+  );
 
-  if (isSuperAdmin || isSelf) {
+  if (isSuperAdmin || isSelf || isSameCollegeTenant) {
     return user;
   }
 
-  const copy = { ...user };
+  const copy: any = { ...user };
   if (copy.role === UserRole.COLLEGE_ADMIN) {
     if ("email" in copy && copy.email) {
       copy.email = maskEmail(copy.email as string);

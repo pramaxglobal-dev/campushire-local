@@ -187,6 +187,60 @@ export const deactivateInvite = async (inviteId: string, collegeId: string): Pro
   return updated;
 };
 
+export const deleteInvitePermanent = async (
+  inviteId: string,
+  collegeId: string,
+  actorSubRole: string | null
+): Promise<{ success: boolean }> => {
+  if (actorSubRole === "MEMBER") {
+    throw new ServiceError("Forbidden: Coordinators cannot delete invite codes.", 403);
+  }
+
+  const college = await getCollegeScope(collegeId);
+
+  const invite = await prisma.invite.findFirst({
+    where: {
+      id: inviteId,
+      collegeProfileId: college.id,
+      tenantId: college.tenantId
+    },
+    include: {
+      uses: { select: { id: true } }
+    }
+  });
+
+  if (!invite) {
+    throw new ServiceError("Invite code not found.", 404);
+  }
+
+  const actualUsesCount = invite.usedCount > 0 ? invite.usedCount : invite.uses.length;
+
+  if (actualUsesCount > 0) {
+    throw new ServiceError(
+      `This code has been used by ${actualUsesCount} student(s) and cannot be deleted. You can deactivate it instead.`,
+      400
+    );
+  }
+
+  await prisma.invite.delete({
+    where: { id: invite.id }
+  });
+
+  await logActivity({
+    actorUserId: college.adminUserId,
+    tenantId: college.tenantId,
+    action: "invite.deleted",
+    entityType: "Invite",
+    entityId: invite.id,
+    metadata: {
+      collegeId: college.id,
+      code: invite.code
+    }
+  });
+
+  return { success: true };
+};
+
 export const validateInviteCode = async (
   code: string
 ): Promise<{ valid: boolean; invite?: Invite; reason?: string }> => {

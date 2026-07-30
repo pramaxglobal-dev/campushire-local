@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import {
   NotificationChannel,
   NotificationType,
+  UserRole,
   type Application,
   type CollegeProfile,
   type InterviewSlot,
@@ -184,48 +185,45 @@ export const sendNotification = async (input: SendNotificationInput): Promise<vo
     }
 
     if (input.channels.includes(NotificationChannel.EMAIL)) {
-      try {
-        const allowed = await getPreferenceEnabled(user.id, input.type, NotificationChannel.EMAIL);
-        if (allowed) {
-          await sendEmail(
-            user.email,
-            input.title,
-            input.emailHtml ?? defaultEmailHtml(`${user.firstName} ${user.lastName}`.trim(), input.title, input.body)
-          );
-        }
-      } catch (error) {
-        logger.error({ error, userId: user.id }, "Email notification failed");
-      }
+      getPreferenceEnabled(user.id, input.type, NotificationChannel.EMAIL)
+        .then((allowed) => {
+          if (allowed) {
+            return sendEmail(
+              user.email,
+              input.title,
+              input.emailHtml ?? defaultEmailHtml(`${user.firstName} ${user.lastName}`.trim(), input.title, input.body)
+            );
+          }
+        })
+        .catch((error) => logger.error({ error, userId: user.id }, "Email notification failed"));
     }
 
     if (input.channels.includes(NotificationChannel.WHATSAPP)) {
-      try {
-        const allowed = await getPreferenceEnabled(user.id, input.type, NotificationChannel.WHATSAPP);
-        if (allowed && user.phone) {
-          await sendWhatsAppMessage(
-            user.phone,
-            input.whatsappMessage ?? `${input.title}\n${input.body}`
-          );
-        }
-      } catch (error) {
-        logger.error({ error, userId: user.id }, "WhatsApp notification failed");
-      }
+      getPreferenceEnabled(user.id, input.type, NotificationChannel.WHATSAPP)
+        .then((allowed) => {
+          if (allowed && user.phone) {
+            return sendWhatsAppMessage(
+              user.phone,
+              input.whatsappMessage ?? `${input.title}\n${input.body}`
+            );
+          }
+        })
+        .catch((error) => logger.error({ error, userId: user.id }, "WhatsApp notification failed"));
     }
 
     if (input.channels.includes(NotificationChannel.PUSH)) {
-      try {
-        const allowed = await getPreferenceEnabled(user.id, input.type, NotificationChannel.PUSH);
-        if (allowed) {
-          const tokenFromMetadata = getPushTokenFromMetadata(user.metadata);
-          const token =
-            tokenFromMetadata ?? (await getPushTokenFromSettings(user.id, user.tenantId));
-          if (token) {
-            await sendPushNotification(token, input.title, input.body, input.pushData);
+      getPreferenceEnabled(user.id, input.type, NotificationChannel.PUSH)
+        .then(async (allowed) => {
+          if (allowed) {
+            const tokenFromMetadata = getPushTokenFromMetadata(user.metadata);
+            const token =
+              tokenFromMetadata ?? (await getPushTokenFromSettings(user.id, user.tenantId));
+            if (token) {
+              await sendPushNotification(token, input.title, input.body, input.pushData);
+            }
           }
-        }
-      } catch (error) {
-        logger.error({ error, userId: user.id }, "Push notification failed");
-      }
+        })
+        .catch((error) => logger.error({ error, userId: user.id }, "Push notification failed"));
     }
   } catch (error) {
     logger.error({ error, userId: input.userId }, "Notification dispatch failed");
@@ -375,4 +373,145 @@ export const notifyJobMatch = async (
     actionUrl: `/jobs/${job.id}`,
     channels: [NotificationChannel.IN_APP, NotificationChannel.PUSH]
   });
+};
+
+export const notifyCollegeStaffStudentJoined = async (
+  student: User,
+  collegeTenantId: string,
+  collegeName: string
+): Promise<void> => {
+  try {
+    const staffMembers = await prisma.user.findMany({
+      where: {
+        tenantId: collegeTenantId,
+        role: UserRole.COLLEGE_ADMIN,
+        isActive: true
+      },
+      select: { id: true }
+    });
+
+    const studentName = `${student.firstName} ${student.lastName}`.trim();
+    for (const staff of staffMembers) {
+      await sendNotification({
+        userId: staff.id,
+        type: NotificationType.SYSTEM,
+        title: "New Student Joined",
+        body: `${studentName} just joined ${collegeName} using your invite code.`,
+        contextType: "STUDENT",
+        contextId: student.id,
+        actionUrl: "/dashboard/college/students",
+        channels: [NotificationChannel.IN_APP, NotificationChannel.EMAIL]
+      });
+    }
+  } catch (error) {
+    logger.error({ error, studentId: student.id, collegeTenantId }, "Failed to notify college staff of student joining");
+  }
+};
+
+export const notifyCollegeStaffInterviewScheduled = async (
+  slot: InterviewSlot,
+  application: Application,
+  job: Job,
+  candidate: User,
+  companyName: string
+): Promise<void> => {
+  try {
+    const studentProfile = await prisma.studentProfile.findUnique({
+      where: { userId: candidate.id },
+      select: {
+        tenantId: true,
+        collegeProfile: { select: { tenantId: true } }
+      }
+    });
+
+    const tenantId =
+      studentProfile?.collegeProfile?.tenantId ||
+      studentProfile?.tenantId ||
+      candidate.tenantId;
+
+    if (!tenantId) return;
+
+    const staffMembers = await prisma.user.findMany({
+      where: {
+        tenantId,
+        role: UserRole.COLLEGE_ADMIN,
+        isActive: true
+      },
+      select: { id: true }
+    });
+
+    if (!staffMembers.length) return;
+
+    const start = formatDate(slot.scheduledStartAt, "dd MMM yyyy");
+    const studentName = `${candidate.firstName} ${candidate.lastName}`.trim();
+
+    for (const staff of staffMembers) {
+      await sendNotification({
+        userId: staff.id,
+        type: NotificationType.INTERVIEW_SCHEDULED,
+        title: "Student Interview Scheduled",
+        body: `${studentName} has an interview scheduled with ${companyName} for ${job.title} on ${start}.`,
+        contextType: "APPLICATION",
+        contextId: application.id,
+        actionUrl: "/dashboard/college/students",
+        channels: [NotificationChannel.IN_APP, NotificationChannel.EMAIL]
+      });
+    }
+  } catch (error) {
+    console.error("NOTIF ERROR INTERVIEW:", error);
+    logger.error({ error, applicationId: application.id }, "Failed to notify college staff of student interview");
+  }
+};
+
+export const notifyCollegeStaffStudentHired = async (
+  application: Application,
+  job: Job,
+  candidate: User,
+  companyName: string
+): Promise<void> => {
+  try {
+    const studentProfile = await prisma.studentProfile.findUnique({
+      where: { userId: candidate.id },
+      select: {
+        tenantId: true,
+        collegeProfile: { select: { tenantId: true } }
+      }
+    });
+
+    const tenantId =
+      studentProfile?.collegeProfile?.tenantId ||
+      studentProfile?.tenantId ||
+      candidate.tenantId;
+
+    if (!tenantId) return;
+
+    const staffMembers = await prisma.user.findMany({
+      where: {
+        tenantId,
+        role: UserRole.COLLEGE_ADMIN,
+        isActive: true
+      },
+      select: { id: true }
+    });
+
+    if (!staffMembers.length) return;
+
+    const studentName = `${candidate.firstName} ${candidate.lastName}`.trim();
+
+    for (const staff of staffMembers) {
+      await sendNotification({
+        userId: staff.id,
+        type: NotificationType.APPLICATION_STATUS,
+        title: "Student Hired 🎉",
+        body: `${studentName} has been hired by ${companyName} for ${job.title}! 🎉`,
+        contextType: "APPLICATION",
+        contextId: application.id,
+        actionUrl: "/dashboard/college/students",
+        channels: [NotificationChannel.IN_APP, NotificationChannel.EMAIL]
+      });
+    }
+  } catch (error) {
+    console.error("NOTIF ERROR HIRED:", error);
+    logger.error({ error, applicationId: application.id }, "Failed to notify college staff of student placement");
+  }
 };

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { formatDate } from "@campushire/utils";
-import { Copy, KeyRound, Plus, Power } from "lucide-react";
+import { Copy, KeyRound, Plus, Power, Trash2 } from "lucide-react";
 import { Badge, Button, Card, CardContent, Input, Modal, Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
@@ -10,14 +10,18 @@ import { PageHeader } from "@/components/common/PageHeader";
 import {
   createInvite,
   deactivateInvite,
+  deleteInvitePermanent,
   getInviteStats,
   listInvites,
   type InviteStats,
   type InviteWithUsages
 } from "@/lib/api/invites.api";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { SubRole } from "@campushire/types";
 import { toast } from "sonner";
 
 export default function CollegeInviteCodesPage() {
+  const { user } = useAuth();
   const [invites, setInvites] = useState<InviteWithUsages[]>([]);
   const [stats, setStats] = useState<InviteStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -27,6 +31,14 @@ export default function CollegeInviteCodesPage() {
   const [maxUses, setMaxUses] = useState(50);
   const [expiryDate, setExpiryDate] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // Delete confirmation state
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<InviteWithUsages | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const canGenerateInvite = user?.subRole !== SubRole.MEMBER;
+  const canDelete = user?.subRole !== SubRole.MEMBER;
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -73,6 +85,39 @@ export default function CollegeInviteCodesPage() {
     }
   };
 
+  const openDeleteConfirm = (invite: InviteWithUsages) => {
+    setDeleteTarget(invite);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+
+    // Frontend safety check — backend enforces this too
+    if (deleteTarget.usedCount > 0) {
+      toast.error(`This code has been used by ${deleteTarget.usedCount} student(s) and cannot be deleted. You can deactivate it instead.`);
+      setDeleteConfirmOpen(false);
+      setDeleteTarget(null);
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      await deleteInvitePermanent(deleteTarget.id);
+      toast.success(`Invite code "${deleteTarget.code}" permanently deleted.`);
+      setDeleteConfirmOpen(false);
+      setDeleteTarget(null);
+      // Remove from list instantly without page reload
+      setInvites(prev => prev.filter(inv => inv.id !== deleteTarget.id));
+      // Refresh stats
+      await loadData();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete invite code.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     void navigator.clipboard.writeText(text);
     toast.success("Invite code copied to clipboard!");
@@ -92,10 +137,12 @@ export default function CollegeInviteCodesPage() {
         title="Student Invite Codes"
         subtitle="Generate unique signup invite codes for student registration and track usage."
         actions={
-          <Button onClick={() => setModalOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Generate New Code
-          </Button>
+          canGenerateInvite ? (
+            <Button onClick={() => setModalOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Generate New Code
+            </Button>
+          ) : undefined
         }
       />
 
@@ -144,7 +191,7 @@ export default function CollegeInviteCodesPage() {
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8 text-slate-500">
                     <KeyRound className="mx-auto h-8 w-8 text-slate-400 mb-2" />
-                    No invite codes generated yet. Click "Generate New Code" above to create one.
+                    No invite codes generated yet. Click &quot;Generate New Code&quot; above to create one.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -175,17 +222,35 @@ export default function CollegeInviteCodesPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {row.isActive && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void handleDeactivate(row.id)}
-                          className="text-red-600 border-red-200 hover:bg-red-50"
-                        >
-                          <Power className="h-3.5 w-3.5 mr-1" />
-                          Deactivate
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {row.isActive && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void handleDeactivate(row.id)}
+                            className="text-red-600 border-red-200 hover:bg-red-50"
+                          >
+                            <Power className="h-3.5 w-3.5 mr-1" />
+                            Deactivate
+                          </Button>
+                        )}
+                        {canDelete && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openDeleteConfirm(row)}
+                            className="text-red-700 border-red-300 hover:bg-red-50"
+                            title={
+                              row.usedCount > 0
+                                ? `Used by ${row.usedCount} student(s) — cannot delete`
+                                : "Delete permanently"
+                            }
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mr-1" />
+                            Delete
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -195,6 +260,7 @@ export default function CollegeInviteCodesPage() {
         </CardContent>
       </Card>
 
+      {/* Generate Code Modal */}
       <Modal open={modalOpen} onOpenChange={setModalOpen} title="Generate Student Invite Code">
         <div className="space-y-4">
           <div>
@@ -223,6 +289,53 @@ export default function CollegeInviteCodesPage() {
               {creating ? "Generating..." : "Generate Code"}
             </Button>
           </div>
+        </div>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen} title="Delete Invite Code">
+        <div className="space-y-4">
+          {deleteTarget && deleteTarget.usedCount > 0 ? (
+            <>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                <p className="text-sm font-semibold text-amber-800 mb-1">⚠️ Cannot Delete This Code</p>
+                <p className="text-sm text-amber-700">
+                  This code has been used by <strong>{deleteTarget.usedCount} student(s)</strong> and cannot be
+                  permanently deleted — removing it would break the link to those students. You can{" "}
+                  <strong>Deactivate</strong> it instead to stop new signups.
+                </p>
+              </div>
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="rounded-lg border border-red-100 bg-red-50 p-4">
+                <p className="text-sm font-semibold text-red-800 mb-1">⚠️ This action cannot be undone.</p>
+                <p className="text-sm text-red-700">
+                  Are you sure you want to permanently delete invite code{" "}
+                  <span className="font-mono font-bold">{deleteTarget?.code}</span>? This will remove it from the
+                  database completely.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)} disabled={deleting}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => void handleDeleteConfirm()}
+                  disabled={deleting}
+                  className="bg-red-600 hover:bg-red-700 text-white border-red-600"
+                >
+                  <Trash2 className="h-4 w-4 mr-1.5" />
+                  {deleting ? "Deleting..." : "Yes, Delete Permanently"}
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </Modal>
     </div>

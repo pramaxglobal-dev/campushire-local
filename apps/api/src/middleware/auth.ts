@@ -45,7 +45,7 @@ const attachUserToRequest = async (req: Request, token: string): Promise<void> =
     userId: user.id,
     role: user.role,
     tenantId: user.tenantId,
-    subRole: user.subRole ?? SubRole.MEMBER,
+    subRole: user.subRole ?? SubRole.OWNER,
     isEmailVerified: user.isEmailVerified,
     isApproved: user.isApproved,
     isSuspended

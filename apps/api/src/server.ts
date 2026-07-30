@@ -8,6 +8,8 @@ import { logger } from "./lib/logger";
 import { initSocket } from "./lib/socket";
 import { runInterviewReminderJob } from "./jobs/interview-reminders";
 
+// Force reload for non-blocking notification dispatches - 2026
+
 const server = createServer(app);
 const io = initSocket(server);
 

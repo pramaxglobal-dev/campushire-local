@@ -5,6 +5,7 @@ import { requireRole } from "../../middleware/rbac";
 import {
   createInviteController,
   deactivateInviteController,
+  deleteInvitePermanentController,
   getInviteStatsController,
   listInvitesController,
   validateInviteCodeController
@@ -16,6 +17,7 @@ router.get("/validate/:code", validateInviteCodeController);
 
 router.post("/", authenticateJWT, requireRole(UserRole.COLLEGE_ADMIN), createInviteController);
 router.get("/", authenticateJWT, requireRole(UserRole.COLLEGE_ADMIN), listInvitesController);
+router.delete("/permanent/:id", authenticateJWT, requireRole(UserRole.COLLEGE_ADMIN), deleteInvitePermanentController);
 router.delete("/:id", authenticateJWT, requireRole(UserRole.COLLEGE_ADMIN), deactivateInviteController);
 router.get("/stats", authenticateJWT, requireRole(UserRole.COLLEGE_ADMIN), getInviteStatsController);
 

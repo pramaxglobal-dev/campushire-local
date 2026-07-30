@@ -19,7 +19,12 @@ import {
   unsuspendUserController,
   updatePlatformSettingController,
   bulkApproveStudentsController,
-  getCohortDashboardController
+  getCohortDashboardController,
+  listCollegeTeamController,
+  addCollegeTeamMemberController,
+  removeCollegeTeamMemberController,
+  deleteTeamMemberPermanentlyController,
+  getStudentDetailsForCollegeAdminController
 } from "./admin.controller";
 import {
   AdminUserFilterSchema,
@@ -30,7 +35,8 @@ import {
   UpdatePlatformSettingSchema,
   UserIdParamSchema,
   BulkApproveStudentsSchema,
-  CohortDashboardFilterSchema
+  CohortDashboardFilterSchema,
+  AddTeamMemberSchema
 } from "./admin.schema";
 
 const router = Router();
@@ -50,7 +56,7 @@ router.post(
   "/students/bulk-approve",
   authenticateJWT,
   requireRole(UserRole.COLLEGE_ADMIN),
-  requireSubRole(SubRole.OWNER, SubRole.ADMIN),
+  requireSubRole(SubRole.OWNER, SubRole.ADMIN, SubRole.MANAGER),
   validate({ body: BulkApproveStudentsSchema }),
   bulkApproveStudentsController
 );
@@ -75,9 +81,53 @@ router.post(
   "/users/:id/reject",
   authenticateJWT,
   requireRole(UserRole.SUPER_ADMIN, UserRole.COLLEGE_ADMIN),
-  requireSubRole(SubRole.OWNER, SubRole.ADMIN),
+  requireSubRole(SubRole.OWNER, SubRole.ADMIN, SubRole.MANAGER),
   validate({ params: UserIdParamSchema, body: ReasonSchema }),
   rejectUserController
+);
+
+router.get(
+  "/team",
+  authenticateJWT,
+  requireRole(UserRole.COLLEGE_ADMIN),
+  listCollegeTeamController
+);
+
+router.post(
+  "/team",
+  authenticateJWT,
+  requireRole(UserRole.COLLEGE_ADMIN),
+  (req: Request, _res: Response, next: NextFunction) => {
+    console.log("[DEBUG team POST] raw body:", JSON.stringify(req.body));
+    console.log("[DEBUG team POST] content-type:", req.headers["content-type"]);
+    next();
+  },
+  validate({ body: AddTeamMemberSchema }),
+  addCollegeTeamMemberController
+);
+
+router.delete(
+  "/team/:id",
+  authenticateJWT,
+  requireRole(UserRole.COLLEGE_ADMIN),
+  validate({ params: UserIdParamSchema }),
+  removeCollegeTeamMemberController
+);
+
+router.delete(
+  "/team/:id/permanent",
+  authenticateJWT,
+  requireRole(UserRole.COLLEGE_ADMIN),
+  validate({ params: UserIdParamSchema }),
+  deleteTeamMemberPermanentlyController
+);
+
+router.get(
+  "/students/:id/details",
+  authenticateJWT,
+  requireRole(UserRole.COLLEGE_ADMIN),
+  validate({ params: UserIdParamSchema }),
+  getStudentDetailsForCollegeAdminController
 );
 
 // ==========================================

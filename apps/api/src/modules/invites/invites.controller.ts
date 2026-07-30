@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { UserRole } from "@campushire/types";
+import { SubRole, UserRole } from "@campushire/types";
 import { prisma } from "../../lib/prisma";
 import {
   CreateInviteSchema,
@@ -9,6 +9,7 @@ import {
 import {
   createInvite,
   deactivateInvite,
+  deleteInvitePermanent,
   getCollegeIdForAdmin,
   getInviteStats,
   listInvites,
@@ -29,12 +30,12 @@ const requireCollegeAdmin = (req: Request): { userId: string; tenantId: string }
   if (!req.user) {
     throw new ControllerError("Unauthorized", 401);
   }
-  if (req.user.role !== UserRole.COLLEGE_ADMIN || !req.user.tenantId) {
+  if (req.user.role !== UserRole.COLLEGE_ADMIN) {
     throw new ControllerError("Forbidden", 403);
   }
   return {
     userId: req.user.userId,
-    tenantId: req.user.tenantId
+    tenantId: req.user.tenantId || ""
   };
 };
 
@@ -45,6 +46,10 @@ export const createInviteController = async (
 ): Promise<void> => {
   try {
     const actor = requireCollegeAdmin(req);
+    if (req.user?.subRole === SubRole.MEMBER) {
+      throw new ControllerError("Forbidden: Placement Coordinators cannot generate invite codes.", 403);
+    }
+
     const dto = CreateInviteSchema.parse(req.body);
     const collegeId = await getCollegeIdForAdmin(actor.userId, actor.tenantId);
     const invite = await createInvite(collegeId, actor.userId, dto);
@@ -86,6 +91,10 @@ export const deactivateInviteController = async (
 ): Promise<void> => {
   try {
     const actor = requireCollegeAdmin(req);
+    if (req.user?.subRole === SubRole.MEMBER) {
+      throw new ControllerError("Forbidden: Placement Coordinators cannot deactivate invite codes.", 403);
+    }
+
     const params = InviteIdParamSchema.parse(req.params);
 
     // Explicit tenant-ownership verification before mutation
@@ -106,6 +115,43 @@ export const deactivateInviteController = async (
     res.status(200).json({
       success: true,
       data: invite,
+      error: null
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteInvitePermanentController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const actor = requireCollegeAdmin(req);
+    if (req.user?.subRole === SubRole.MEMBER) {
+      throw new ControllerError("Forbidden: Coordinators cannot delete invite codes.", 403);
+    }
+
+    const params = InviteIdParamSchema.parse(req.params);
+
+    const targetInvite = await prisma.invite.findUnique({
+      where: { id: params.id },
+      select: { tenantId: true }
+    });
+    if (!targetInvite) {
+      throw new ControllerError("Invite not found", 404);
+    }
+    if (targetInvite.tenantId !== actor.tenantId) {
+      throw new ControllerError("Forbidden tenant access.", 403);
+    }
+
+    const collegeId = await getCollegeIdForAdmin(actor.userId, actor.tenantId);
+    const result = await deleteInvitePermanent(params.id, collegeId, req.user?.subRole ?? null);
+
+    res.status(200).json({
+      success: true,
+      data: result,
       error: null
     });
   } catch (error) {

@@ -17,7 +17,8 @@ import {
   updateCourseController,
   updateEnrollmentProgressController,
   assignStudentsController,
-  getCourseCompletionController
+  getCourseCompletionController,
+  getCollegeAssignedCoursesController
 } from "./training.controller";
 import { SubRole } from "@campushire/types";
 import { requireSubRole } from "../../middleware/rbac";
@@ -27,6 +28,12 @@ const trainingRouter = Router();
 
 courseRouter.get("/", optionalAuth, listCoursesController);
 courseRouter.get("/my-enrollments", authenticateJWT, getMyEnrollmentsController);
+courseRouter.get(
+  "/assigned",
+  authenticateJWT,
+  requireRole(UserRole.COLLEGE_ADMIN),
+  getCollegeAssignedCoursesController
+);
 courseRouter.get("/:id", optionalAuth, getCourseController);
 courseRouter.post(
   "/",

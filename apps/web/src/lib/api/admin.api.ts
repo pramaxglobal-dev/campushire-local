@@ -1,4 +1,4 @@
-import type { ActivityLog, FeatureFlag, PaginatedResponse, PlatformSetting, Tenant, UserRole, Plan } from "@campushire/types";
+import type { ActivityLog, FeatureFlag, PaginatedResponse, PlatformSetting, Tenant, UserRole, SubRole, Plan } from "@campushire/types";
 import { apiClient, unwrapPaginatedResponse, unwrapResponse, unwrapVoidResponse } from "@/lib/api/client";
 import type { SafeUser } from "@/lib/api/auth.api";
 import type { FullUserProfile } from "@/lib/utils/profile-types";
@@ -156,8 +156,9 @@ export interface CohortStudentItem {
   department: string | null;
   careerScore: number;
   isProfileComplete: boolean;
+  applicationsCount?: number;
+  upcomingInterviewDate?: string | Date | null;
   user: {
-    id: string;
     firstName: string;
     lastName: string;
     email: string;
@@ -174,11 +175,92 @@ export const getCohortDashboard = async (params?: {
   const response = await apiClient.get("/api/admin/cohort-dashboard", { params });
   return unwrapResponse<{
     stats: CohortDashboardStats;
-    students: PaginatedResponse<CohortStudentItem[]>;
+    students: CohortStudentItem[];
   }>(response);
 };
 
 export const bulkApproveStudents = async (userIds: string[]) => {
   const response = await apiClient.post("/api/admin/students/bulk-approve", { userIds });
   return unwrapResponse<{ approvedCount: number; failedIds: string[] }>(response);
+};
+
+export interface CollegeTeamMember {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: string;
+  subRole: SubRole | null;
+  isActive: boolean;
+  isApproved: boolean;
+  createdAt: string;
+  temporaryPassword?: string;
+}
+
+export const listCollegeTeam = async (): Promise<CollegeTeamMember[]> => {
+  const response = await apiClient.get("/api/admin/team");
+  return unwrapResponse(response);
+};
+
+export const addCollegeTeamMember = async (payload: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  subRole: SubRole;
+}): Promise<CollegeTeamMember> => {
+  const response = await apiClient.post("/api/admin/team", payload);
+  return unwrapResponse(response);
+};
+
+export const removeCollegeTeamMember = async (id: string): Promise<void> => {
+  const response = await apiClient.delete(`/api/admin/team/${id}`);
+  unwrapVoidResponse(response);
+};
+
+export const deleteTeamMemberPermanently = async (id: string): Promise<{ success: boolean }> => {
+  const response = await apiClient.delete(`/api/admin/team/${id}/permanent`);
+  return unwrapResponse(response);
+};
+
+export interface StudentDetailViewData {
+  student: {
+    id: string;
+    userId: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string | null;
+    isApproved: boolean;
+    program?: string | null;
+    department?: string | null;
+    graduationYear?: number | null;
+    cgpa?: number | null;
+    skills?: any;
+    resumeUrl?: string | null;
+  };
+  applications: Array<{
+    id: string;
+    jobId: string;
+    jobTitle: string;
+    companyName: string;
+    appliedAt: string;
+    status: string;
+  }>;
+  interviews: Array<{
+    id: string;
+    jobTitle: string;
+    companyName: string;
+    scheduledStartAt: string;
+    scheduledEndAt: string;
+    round: string;
+    mode: string;
+    status: string;
+  }>;
+}
+
+export const getStudentDetailsForCollegeAdmin = async (
+  userId: string
+): Promise<StudentDetailViewData> => {
+  const response = await apiClient.get(`/api/admin/students/${userId}/details`);
+  return unwrapResponse(response);
 };

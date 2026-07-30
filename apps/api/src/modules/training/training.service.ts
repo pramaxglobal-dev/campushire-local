@@ -76,13 +76,13 @@ const normalizeSkillsFilter = (value: CourseFilters["skillsCovered"]): string[] 
 };
 
 const parseSkills = (value: Prisma.JsonValue | null): string[] => {
-  if (!value) {
+  if (value === null || value === undefined) {
     return [];
   }
   if (Array.isArray(value)) {
     return value.filter((item): item is string => typeof item === "string");
   }
-  if (typeof value === "object") {
+  if (typeof value === "object" && value !== null) {
     return Object.values(value as Record<string, unknown>).filter(
       (item): item is string => typeof item === "string"
     );
@@ -109,7 +109,7 @@ export const listCourses = async (
 
   const viewerTenantId = viewer?.tenantId ?? null;
   const where: Prisma.CourseWhereInput = {
-    tenantId: viewerTenantId ?? { not: "" },
+    ...(viewer?.role === UserRole.TRAINING_PARTNER && viewerTenantId ? { tenantId: viewerTenantId } : {}),
     level: filters.level,
     mode: filters.mode,
     trainingPartnerProfileId: filters.trainingPartnerId,
@@ -124,10 +124,24 @@ export const listCourses = async (
     ...(viewer?.role === UserRole.TRAINING_PARTNER ? {} : { isActive: true })
   };
 
+  console.log("LIST_COURSES_WHERE:", JSON.stringify(where, null, 2));
   const [total, rows] = await prisma.$transaction([
     prisma.course.count({ where }),
     prisma.course.findMany({
       where,
+      include: {
+        trainingPartnerProfile: {
+          select: {
+            organizationName: true,
+            user: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            }
+          }
+        }
+      },
       orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
       skip: (page - 1) * limit,
       take: limit
@@ -607,10 +621,11 @@ export const assignStudentsToCourse = async (
   courseId: string,
   adminUserId: string
 ) => {
+  const actor = await getUserWithTenant(adminUserId);
   const txResult = await prisma.$transaction(async (tx) => {
-    // 1. Get college profile
-    const college = await tx.collegeProfile.findUnique({
-      where: { adminUserId }
+    // 1. Get college profile by tenantId
+    const college = await tx.collegeProfile.findFirst({
+      where: { tenantId: actor.tenantId }
     });
     if (!college) throw new ServiceError("College profile not found", 403);
 
@@ -635,9 +650,9 @@ export const assignStudentsToCourse = async (
       where: { courseId, userId: { in: validUserIds } },
       select: { userId: true }
     });
-    const existingIds = existing.map(e => e.userId);
-    
-    const toEnroll = validUserIds.filter(id => !existingIds.includes(id));
+    const existingIds = existing.map((e) => e.userId);
+
+    const toEnroll = validUserIds.filter((id) => !existingIds.includes(id));
 
     if (toEnroll.length === 0) {
       return { enrolledCount: 0, failedIds: [...failedIds, ...existingIds], toEnroll: [] };
@@ -645,11 +660,11 @@ export const assignStudentsToCourse = async (
 
     // 4. Enroll
     const result = await tx.courseEnrollment.createMany({
-      data: toEnroll.map(id => ({
+      data: toEnroll.map((id) => ({
         courseId,
         userId: id,
         source: EnrollmentSource.ADMIN_ASSIGNED,
-        assignedByUserId: adminUserId,
+        assignedByUserId: adminUserId
       })),
       skipDuplicates: true
     });
@@ -665,7 +680,7 @@ export const assignStudentsToCourse = async (
         type: NotificationType.SYSTEM,
         channels: [NotificationChannel.IN_APP],
         title: "Assigned to a New Course",
-        body: "Your college has assigned you a new training course to complete.",
+        body: "Your college has assigned you a new training course to complete."
       });
     } catch (e) {
       logger.error({ error: e, userId: uid }, "Failed to send course assignment notification");
@@ -673,6 +688,107 @@ export const assignStudentsToCourse = async (
   }
 
   return { enrolledCount: txResult.enrolledCount, failedIds: txResult.failedIds };
+};
+
+export const getCollegeAssignedCourses = async (userId: string) => {
+  const actor = await getUserWithTenant(userId);
+  const college = await prisma.collegeProfile.findFirst({
+    where: { tenantId: actor.tenantId }
+  });
+  if (!college) {
+    throw new ServiceError("College profile not found", 404);
+  }
+
+  const enrollments = await prisma.courseEnrollment.findMany({
+    where: {
+      user: {
+        studentProfile: {
+          collegeProfileId: college.id
+        }
+      }
+    },
+    include: {
+      course: {
+        include: {
+          trainingPartnerProfile: {
+            select: {
+              organizationName: true,
+              user: {
+                select: {
+                  firstName: true,
+                  lastName: true
+                }
+              }
+            }
+          }
+        }
+      },
+      user: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          studentProfile: {
+            select: {
+              program: true,
+              department: true
+            }
+          }
+        }
+      }
+    },
+    orderBy: { enrolledAt: "desc" }
+  });
+
+  const courseMap = new Map<string, any>();
+
+  for (const en of enrollments) {
+    const courseId = en.courseId;
+    if (!courseMap.has(courseId)) {
+      const partnerName =
+        en.course.trainingPartnerProfile?.organizationName ||
+        `${en.course.trainingPartnerProfile?.user?.firstName || ""} ${en.course.trainingPartnerProfile?.user?.lastName || ""}`.trim() ||
+        "Training Partner";
+
+      courseMap.set(courseId, {
+        courseId: en.course.id,
+        courseTitle: en.course.title,
+        trainingPartnerName: partnerName,
+        durationHours: en.course.durationHours,
+        price: en.course.price,
+        assignedCount: 0,
+        completedCount: 0,
+        completionPct: 0,
+        students: []
+      });
+    }
+
+    const group = courseMap.get(courseId);
+    group.assignedCount += 1;
+    const isCompleted = en.status === EnrollmentStatus.COMPLETED || en.progressPct === 100;
+    if (isCompleted) {
+      group.completedCount += 1;
+    }
+
+    group.students.push({
+      id: en.user.id,
+      name: `${en.user.firstName} ${en.user.lastName}`.trim(),
+      email: en.user.email,
+      program: en.user.studentProfile?.program,
+      department: en.user.studentProfile?.department,
+      status: isCompleted ? "COMPLETED" : en.status === EnrollmentStatus.IN_PROGRESS ? "IN_PROGRESS" : "NOT_STARTED",
+      progressPct: en.progressPct || 0,
+      enrolledAt: en.enrolledAt
+    });
+  }
+
+  const result = Array.from(courseMap.values()).map((c) => ({
+    ...c,
+    completionPct: c.assignedCount > 0 ? Math.round((c.completedCount / c.assignedCount) * 100) : 0
+  }));
+
+  return result;
 };
 
 export const getCourseCompletionStats = async (actor: any, courseId: string) => {

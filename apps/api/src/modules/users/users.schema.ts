@@ -125,17 +125,17 @@ export const UpdateProfileSchema = z.object({
   collegeProfile: z
     .object({
       name: z.string().trim().min(1).max(200).optional(),
-      naacGrade: z.string().trim().min(1).max(20).optional(),
-      streams: z.record(z.unknown()).or(z.array(z.unknown())).optional(),
-      website: z.string().url().optional(),
-      placementEmail: z.string().email().optional(),
-      placementPhone: z.string().trim().min(10).max(20).optional(),
-      address: z.string().trim().min(1).max(5000).optional(),
-      city: z.string().trim().min(1).max(120).optional(),
-      state: z.string().trim().min(1).max(120).optional(),
-      pincode: z.string().trim().min(4).max(12).optional(),
+      naacGrade: z.string().trim().max(20).optional().nullable(),
+      streams: z.record(z.unknown()).or(z.array(z.unknown())).optional().nullable(),
+      website: z.string().trim().optional().nullable(),
+      placementEmail: z.string().trim().optional().nullable(),
+      placementPhone: z.string().trim().optional().nullable(),
+      address: z.string().trim().max(5000).optional().nullable(),
+      city: z.string().trim().max(120).optional().nullable(),
+      state: z.string().trim().max(120).optional().nullable(),
+      pincode: z.string().trim().max(12).optional().nullable(),
       openForPlacement: z.boolean().optional(),
-      about: z.string().trim().min(1).max(5000).optional()
+      about: z.string().trim().max(5000).optional().nullable()
     })
     .optional()
 });

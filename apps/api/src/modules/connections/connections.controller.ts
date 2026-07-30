@@ -56,7 +56,7 @@ export const requestConnectionController = async (
     const connection = await requestConnection(actor.userId, dto.collegeId, dto.message, actor.tenantId);
     const data = {
       ...connection,
-      collegeProfile: sanitizeCollegeProfile(connection.collegeProfile, { userId: actor.userId, role: actor.role })
+      collegeProfile: sanitizeCollegeProfile((connection as any).collegeProfile, { userId: actor.userId, role: actor.role, tenantId: actor.tenantId })
     };
     res.status(201).json({
       success: true,
@@ -98,7 +98,7 @@ export const listConnectionsController = async (
       const rows = await listConnectionsForRecruiter(actor.userId, query.status, actor.tenantId);
       const sanitizedRows = rows.map((r) => ({
         ...r,
-        collegeProfile: sanitizeCollegeProfile(r.collegeProfile, { userId: actor.userId, role: actor.role })
+        collegeProfile: sanitizeCollegeProfile(r.collegeProfile, { userId: actor.userId, role: actor.role, tenantId: actor.tenantId })
       }));
       res.status(200).json({
         success: true,

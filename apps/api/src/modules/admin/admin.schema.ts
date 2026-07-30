@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { NotificationChannel, NotificationType, UserRole } from "@campushire/types";
+import { NotificationChannel, NotificationType, SubRole, UserRole } from "@campushire/types";
 
 export const AdminUserFilterSchema = z.object({
   role: z.nativeEnum(UserRole).optional(),
@@ -54,3 +54,12 @@ export const CohortDashboardFilterSchema = z.object({
 });
 
 export type CohortDashboardFilters = z.infer<typeof CohortDashboardFilterSchema>;
+
+export const AddTeamMemberSchema = z.object({
+  firstName: z.string().trim().min(1, "First name is required").max(100),
+  lastName: z.string().trim().min(1, "Last name is required").max(100),
+  email: z.string().trim().email("Invalid email address"),
+  subRole: z.enum([SubRole.ADMIN, SubRole.MANAGER, SubRole.MEMBER])
+});
+
+export type AddTeamMemberDto = z.infer<typeof AddTeamMemberSchema>;

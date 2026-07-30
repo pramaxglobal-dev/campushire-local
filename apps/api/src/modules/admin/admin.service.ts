@@ -1,9 +1,11 @@
+import crypto from "crypto";
 import { subDays } from "date-fns";
 import { Prisma } from "@prisma/client";
 import {
   NotificationChannel,
   NotificationType,
   Plan,
+  SubRole,
   UserRole,
   type FeatureFlag,
   type ActivityLog,
@@ -18,11 +20,12 @@ import {
 import { getRoleLabel, sanitizeInput } from "@campushire/utils";
 import { prisma } from "../../lib/prisma";
 import { logActivity } from "../../lib/activity";
+import { hashPassword } from "../../lib/bcrypt";
 import { sendNotification } from "../../lib/notification";
 import { APPROVAL_REQUIRED_ROLES } from "../../lib/user-guards";
 import { FULL_USER_INCLUDE, SAFE_USER_SELECT, type FullUserWithRelations } from "../../lib/user-selects";
 import type { SafeUser } from "../auth/auth.service";
-import type { BroadcastDto, UserFilters, CohortDashboardFilters } from "./admin.schema";
+import type { BroadcastDto, UserFilters, CohortDashboardFilters, AddTeamMemberDto } from "./admin.schema";
 
 class ServiceError extends Error {
   statusCode: number;
@@ -157,7 +160,9 @@ export const getUserDetail = async (userId: string): Promise<FullUserProfile> =>
 export const approveUser = async (
   userId: string,
   adminId: string,
-  adminRole?: UserRole
+  adminRole?: UserRole,
+  adminSubRole?: SubRole | null,
+  adminTenantId?: string | null
 ): Promise<SafeUser> => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -172,11 +177,19 @@ export const approveUser = async (
   }
 
   if (adminRole === UserRole.COLLEGE_ADMIN) {
+    if (adminSubRole === SubRole.MEMBER) {
+      throw new ServiceError("Forbidden: Coordinators cannot approve student accounts.", 403);
+    }
     if (user.role !== UserRole.STUDENT) {
       throw new ServiceError("College Admins can only approve student accounts.", 403);
     }
     const college = await prisma.collegeProfile.findFirst({
-      where: { adminUserId: adminId },
+      where: {
+        OR: [
+          { adminUserId: adminId },
+          ...(adminTenantId ? [{ tenantId: adminTenantId }] : [])
+        ]
+      },
       select: { id: true }
     });
     if (!college || user.studentProfile?.collegeProfileId !== college.id) {
@@ -225,7 +238,9 @@ export const rejectUser = async (
   userId: string,
   adminId: string,
   reason: string,
-  adminRole?: UserRole
+  adminRole?: UserRole,
+  adminSubRole?: SubRole | null,
+  adminTenantId?: string | null
 ): Promise<SafeUser> => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -240,11 +255,19 @@ export const rejectUser = async (
   }
 
   if (adminRole === UserRole.COLLEGE_ADMIN) {
+    if (adminSubRole === SubRole.MEMBER) {
+      throw new ServiceError("Forbidden: Coordinators cannot reject student accounts.", 403);
+    }
     if (user.role !== UserRole.STUDENT) {
       throw new ServiceError("College Admins can only reject student accounts.", 403);
     }
     const college = await prisma.collegeProfile.findFirst({
-      where: { adminUserId: adminId },
+      where: {
+        OR: [
+          { adminUserId: adminId },
+          ...(adminTenantId ? [{ tenantId: adminTenantId }] : [])
+        ]
+      },
       select: { id: true }
     });
     if (!college || user.studentProfile?.collegeProfileId !== college.id) {
@@ -717,8 +740,16 @@ export const getCohortDashboardStats = async (
   collegeProfileId: string,
   filters: CohortDashboardFilters
 ) => {
+  const college = await prisma.collegeProfile.findUnique({
+    where: { id: collegeProfileId },
+    select: { tenantId: true }
+  });
+
   const studentWhere: Prisma.StudentProfileWhereInput = {
-    collegeProfileId,
+    OR: [
+      { collegeProfileId },
+      ...(college?.tenantId ? [{ tenantId: college.tenantId }] : [])
+    ],
     ...(filters.batchYear ? { graduationYear: filters.batchYear } : {})
   };
 
@@ -735,7 +766,16 @@ export const getCohortDashboardStats = async (
 
   const appsPerStage = await prisma.application.groupBy({
     by: ["status"],
-    where: { candidate: { studentProfile: { collegeProfileId } } },
+    where: {
+      candidate: {
+        studentProfile: {
+          OR: [
+            { collegeProfileId },
+            ...(college?.tenantId ? [{ tenantId: college.tenantId }] : [])
+          ]
+        }
+      }
+    },
     _count: true
   });
 
@@ -751,7 +791,7 @@ export const getCohortDashboardStats = async (
     JOIN recruiter_profiles rp ON j.recruiter_profile_id = rp.id
     JOIN users u ON a.candidate_user_id = u.id
     JOIN student_profiles sp ON u.id = sp.user_id
-    WHERE sp.college_profile_id = ${collegeProfileId}
+    WHERE (sp.college_profile_id = ${collegeProfileId} OR sp.tenant_id = ${college?.tenantId || collegeProfileId})
       AND a.status = 'HIRED'
     GROUP BY rp.company_name
     ORDER BY count DESC
@@ -776,8 +816,16 @@ export const getCohortDashboardStudents = async (
   collegeProfileId: string,
   filters: CohortDashboardFilters
 ) => {
+  const college = await prisma.collegeProfile.findUnique({
+    where: { id: collegeProfileId },
+    select: { tenantId: true }
+  });
+
   const where: Prisma.StudentProfileWhereInput = {
-    collegeProfileId,
+    OR: [
+      { collegeProfileId },
+      ...(college?.tenantId ? [{ tenantId: college.tenantId }] : [])
+    ],
     ...(filters.batchYear ? { graduationYear: filters.batchYear } : {})
   };
 
@@ -787,17 +835,55 @@ export const getCohortDashboardStudents = async (
     where.user = { applications: { none: { status: "HIRED" } } };
   }
 
-  const [total, students] = await prisma.$transaction([
+  const [total, studentsRaw] = await prisma.$transaction([
     prisma.studentProfile.count({ where }),
     prisma.studentProfile.findMany({
       where,
       include: {
-        user: { select: { firstName: true, lastName: true, email: true, isApproved: true } }
+        user: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+            isApproved: true,
+            applications: {
+              select: {
+                id: true
+              }
+            }
+          }
+        }
       },
       skip: (filters.page - 1) * filters.limit,
       take: filters.limit
     })
   ]);
+
+  const candidateUserIds = studentsRaw.map((s) => s.userId);
+  const upcomingInterviews = await prisma.interviewSlot.findMany({
+    where: {
+      candidateUserId: { in: candidateUserIds },
+      status: { in: ["SCHEDULED", "CONFIRMED", "RESCHEDULED"] }
+    },
+    select: {
+      candidateUserId: true,
+      scheduledStartAt: true
+    },
+    orderBy: { scheduledStartAt: "asc" }
+  });
+
+  const nextInterviewMap = new Map<string, Date>();
+  for (const inv of upcomingInterviews) {
+    if (!nextInterviewMap.has(inv.candidateUserId)) {
+      nextInterviewMap.set(inv.candidateUserId, inv.scheduledStartAt);
+    }
+  }
+
+  const students = studentsRaw.map((s) => ({
+    ...s,
+    applicationsCount: s.user.applications.length,
+    upcomingInterviewDate: nextInterviewMap.get(s.userId) ?? null
+  }));
 
   return {
     success: true,
@@ -809,4 +895,343 @@ export const getCohortDashboardStudents = async (
       totalPages: Math.max(1, Math.ceil(total / filters.limit))
     }
   };
+};
+
+export const getStudentDetailsForCollegeAdmin = async (
+  collegeTenantId: string,
+  collegeProfileId: string,
+  studentUserId: string
+) => {
+  const studentProfile = await prisma.studentProfile.findFirst({
+    where: {
+      userId: studentUserId,
+      OR: [
+        { tenantId: collegeTenantId },
+        { collegeProfileId }
+      ]
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+          isApproved: true,
+          isActive: true
+        }
+      }
+    }
+  });
+
+  if (!studentProfile) {
+    throw new ServiceError("Student profile not found or does not belong to your college.", 404);
+  }
+
+  const applications = await prisma.application.findMany({
+    where: { candidateUserId: studentUserId },
+    include: {
+      job: {
+        select: {
+          id: true,
+          title: true,
+          recruiterProfile: {
+            select: {
+              companyName: true
+            }
+          }
+        }
+      }
+    },
+    orderBy: { appliedAt: "desc" }
+  });
+
+  const interviews = await prisma.interviewSlot.findMany({
+    where: {
+      candidateUserId: studentUserId
+    },
+    include: {
+      job: {
+        select: {
+          id: true,
+          title: true,
+          recruiterProfile: {
+            select: {
+              companyName: true
+            }
+          }
+        }
+      }
+    },
+    orderBy: { scheduledStartAt: "asc" }
+  });
+
+  return {
+    student: {
+      id: studentProfile.id,
+      userId: studentProfile.userId,
+      firstName: studentProfile.user.firstName,
+      lastName: studentProfile.user.lastName,
+      email: studentProfile.user.email,
+      phone: studentProfile.user.phone,
+      isApproved: studentProfile.user.isApproved,
+      program: studentProfile.program,
+      department: studentProfile.department,
+      graduationYear: studentProfile.graduationYear,
+      cgpa: studentProfile.cgpa,
+      skills: studentProfile.skills,
+      resumeUrl: studentProfile.resumeUrl
+    },
+    applications: applications.map((app) => ({
+      id: app.id,
+      jobId: app.jobId,
+      jobTitle: app.job.title,
+      companyName: app.job.recruiterProfile?.companyName || "N/A",
+      appliedAt: app.appliedAt,
+      status: app.status
+    })),
+    interviews: interviews.map((inv) => ({
+      id: inv.id,
+      jobTitle: inv.job.title,
+      companyName: inv.job.recruiterProfile?.companyName || "N/A",
+      scheduledStartAt: inv.scheduledStartAt,
+      scheduledEndAt: inv.scheduledEndAt,
+      round: inv.round,
+      mode: inv.mode,
+      status: inv.status
+    }))
+  };
+};
+
+export interface CollegeTeamMemberItem {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: UserRole;
+  subRole: SubRole | null;
+  isActive: boolean;
+  isApproved: boolean;
+  createdAt: Date | string;
+  temporaryPassword?: string;
+}
+
+const generateTemporaryPassword = (): string => {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  let pass = "CH#";
+  const bytes = crypto.randomBytes(8);
+  for (let i = 0; i < 8; i++) {
+    pass += chars[bytes[i] % chars.length];
+  }
+  return pass;
+};
+
+export const listCollegeTeam = async (
+  tenantId: string
+): Promise<CollegeTeamMemberItem[]> => {
+  const members = await prisma.user.findMany({
+    where: {
+      tenantId,
+      role: UserRole.COLLEGE_ADMIN
+    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      role: true,
+      subRole: true,
+      isActive: true,
+      isApproved: true,
+      createdAt: true
+    },
+    orderBy: {
+      createdAt: "desc"
+    }
+  });
+
+  return members;
+};
+
+export const addCollegeTeamMember = async (
+  actorUserId: string,
+  actorTenantId: string,
+  actorSubRole: SubRole | null,
+  dto: AddTeamMemberDto
+): Promise<CollegeTeamMemberItem> => {
+  if (actorSubRole && actorSubRole !== SubRole.OWNER) {
+    throw new ServiceError("Forbidden: Only College Admins (Owners) can add team members.", 403);
+  }
+
+  const existing = await prisma.user.findUnique({
+    where: { email: dto.email }
+  });
+
+  if (existing) {
+    throw new ServiceError("A user with this email address already exists.", 400);
+  }
+
+  const temporaryPassword = generateTemporaryPassword();
+  const passwordHash = await hashPassword(temporaryPassword);
+  const tin = `tin_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+
+  const newMember = await prisma.user.create({
+    data: {
+      tenantId: actorTenantId,
+      tin,
+      email: dto.email,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      passwordHash,
+      role: UserRole.COLLEGE_ADMIN,
+      subRole: dto.subRole as SubRole,
+      isApproved: true,
+      isActive: true,
+      isEmailVerified: true,
+      metadata: {
+        mustChangePassword: true,
+        temporaryPasswordCreatedAt: new Date().toISOString()
+      }
+    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      role: true,
+      subRole: true,
+      isActive: true,
+      isApproved: true,
+      createdAt: true
+    }
+  });
+
+  await logActivity({
+    actorUserId,
+    tenantId: actorTenantId,
+    action: "team_member.added",
+    entityType: "User",
+    entityId: newMember.id,
+    metadata: {
+      subRole: newMember.subRole
+    }
+  });
+
+  await sendNotification({
+    userId: newMember.id,
+    type: NotificationType.SYSTEM,
+    title: "Staff Account Created",
+    body: `Welcome to CampusHire! Your staff account for ${dto.firstName} ${dto.lastName} has been created. Your temporary login password is: ${temporaryPassword}. Please log in and change your password.`,
+    actionUrl: "/login",
+    channels: [NotificationChannel.IN_APP, NotificationChannel.EMAIL]
+  });
+
+  return {
+    ...newMember,
+    temporaryPassword
+  };
+};
+
+export const removeCollegeTeamMember = async (
+  actorUserId: string,
+  actorTenantId: string,
+  actorSubRole: SubRole | null,
+  targetUserId: string
+): Promise<{ success: boolean }> => {
+  if (actorSubRole && actorSubRole !== SubRole.OWNER) {
+    throw new ServiceError("Forbidden: Only College Admins (Owners) can remove team members.", 403);
+  }
+
+  if (actorUserId === targetUserId) {
+    throw new ServiceError("You cannot remove yourself from the college team.", 400);
+  }
+
+  const target = await prisma.user.findUnique({
+    where: { id: targetUserId }
+  });
+
+  if (!target || target.tenantId !== actorTenantId) {
+    throw new ServiceError("Team member not found or does not belong to your college.", 404);
+  }
+
+  await prisma.user.update({
+    where: { id: targetUserId },
+    data: { isActive: false }
+  });
+
+  await logActivity({
+    actorUserId,
+    tenantId: actorTenantId,
+    action: "team_member.removed",
+    entityType: "User",
+    entityId: targetUserId
+  });
+
+  return { success: true };
+};
+
+export const deleteTeamMemberPermanently = async (
+  actorUserId: string,
+  actorTenantId: string,
+  actorSubRole: SubRole | null,
+  targetUserId: string
+): Promise<{ success: boolean; blockedReason?: string }> => {
+  if (actorSubRole && actorSubRole !== SubRole.OWNER) {
+    throw new ServiceError("Forbidden: Only College Admins (Owners) can permanently delete team members.", 403);
+  }
+
+  if (actorUserId === targetUserId) {
+    throw new ServiceError("You cannot delete your own account.", 400);
+  }
+
+  const target = await prisma.user.findUnique({
+    where: { id: targetUserId }
+  });
+
+  if (!target || target.tenantId !== actorTenantId) {
+    throw new ServiceError("Team member not found or does not belong to your college.", 404);
+  }
+
+  // Safety check: has this user created any invite codes?
+  const invitesCreated = await prisma.invite.count({
+    where: { createdByUserId: targetUserId }
+  });
+
+  if (invitesCreated > 0) {
+    throw new ServiceError(
+      `This staff member has created ${invitesCreated} invite code(s). Deleting them would leave those codes without a creator record. Please deactivate their account instead.`,
+      400
+    );
+  }
+
+  // Safety check: has this user approved any students (activity logs)?
+  const approvalActions = await prisma.activityLog.count({
+    where: {
+      userId: targetUserId,
+      action: { in: ["user.approved", "student.approved"] }
+    }
+  });
+
+  if (approvalActions > 0) {
+    throw new ServiceError(
+      `This staff member has approved ${approvalActions} student(s). Their account history must be preserved. Please deactivate their account instead.`,
+      400
+    );
+  }
+
+  // Safe to delete — no linked records
+  await prisma.user.delete({
+    where: { id: targetUserId }
+  });
+
+  await logActivity({
+    actorUserId,
+    tenantId: actorTenantId,
+    action: "team_member.deleted",
+    entityType: "User",
+    entityId: targetUserId
+  });
+
+  return { success: true };
 };

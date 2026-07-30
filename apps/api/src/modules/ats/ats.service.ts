@@ -14,6 +14,7 @@ import { writeApplicationStatusHistory } from "../../lib/application-history";
 import { resolveUserTenant as getUserTenantId } from "../../lib/tenant";
 import {
   notifyApplicationStatusChanged,
+  notifyCollegeStaffStudentHired,
   notifyOfferReceived,
   sendNotification
 } from "../../lib/notification";
@@ -274,6 +275,19 @@ const performMove = async (
         { error, applicationId: updated.id },
         "Referral commission trigger skipped at OFFERED stage"
       );
+    }
+  }
+
+  if (dto.toStatus === ApplicationStatus.HIRED) {
+    try {
+      const recruiterProfile = await prisma.recruiterProfile.findFirst({
+        where: { userId: recruiterId },
+        select: { companyName: true }
+      });
+      const companyName = recruiterProfile?.companyName || application.job.title || "Company";
+      await notifyCollegeStaffStudentHired(updated, application.job, application.candidate, companyName);
+    } catch (err) {
+      // Safe non-blocking try/catch
     }
   }
 

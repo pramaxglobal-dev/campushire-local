@@ -2,6 +2,7 @@ import path from "path";
 import { nanoid } from "nanoid";
 import { Prisma } from "@prisma/client";
 import {
+  SubRole,
   UserRole,
   type ActivityLog,
   type NotificationPreference,
@@ -66,6 +67,15 @@ const fetchFullProfile = async (userId: string): Promise<FullProfile> => {
     throw new ServiceError("User not found.", 404);
   }
 
+  if (user.role === UserRole.COLLEGE_ADMIN && !user.collegeProfileManaged && user.tenantId) {
+    const college = await prisma.collegeProfile.findFirst({
+      where: { tenantId: user.tenantId }
+    });
+    if (college) {
+      (user as any).collegeProfileManaged = college;
+    }
+  }
+
   return user;
 };
 
@@ -85,6 +95,7 @@ export const updateProfile = async (
   userId: string,
   role: UserRole,
   tenantId: string | null,
+  subRole: SubRole | null,
   dto: UpdateProfileDto
 ): Promise<FullProfile> => {
   await ensureUserTenantScope(userId, tenantId);
@@ -373,19 +384,39 @@ export const updateProfile = async (
   }
 
   if (role === UserRole.COLLEGE_ADMIN && dto.collegeProfile) {
-    await prisma.collegeProfile.updateMany({
+    if (subRole && subRole !== SubRole.OWNER) {
+      throw new ServiceError("Forbidden: Only College Admins (Owners) can edit the college profile.", 403);
+    }
+
+    const college = await prisma.collegeProfile.findFirst({
       where: {
-        adminUserId: userId,
-        tenantId: tenantId ?? undefined
-      },
-      data: {
-        ...dto.collegeProfile,
-        streams: toInputJson(dto.collegeProfile.streams),
-        name: dto.collegeProfile.name ? sanitizeInput(dto.collegeProfile.name) : undefined,
-        about: dto.collegeProfile.about ? sanitizeInput(dto.collegeProfile.about) : undefined,
-        address: dto.collegeProfile.address ? sanitizeInput(dto.collegeProfile.address) : undefined
+        OR: [
+          { adminUserId: userId },
+          ...(tenantId ? [{ tenantId }] : [])
+        ]
       }
     });
+
+    if (college) {
+      await prisma.collegeProfile.update({
+        where: { id: college.id },
+        data: {
+          ...dto.collegeProfile,
+          streams: toInputJson(dto.collegeProfile.streams),
+          name: dto.collegeProfile.name ? sanitizeInput(dto.collegeProfile.name) : undefined,
+          about: dto.collegeProfile.about ? sanitizeInput(dto.collegeProfile.about) : undefined,
+          address: dto.collegeProfile.address ? sanitizeInput(dto.collegeProfile.address) : undefined,
+          naacGrade: dto.collegeProfile.naacGrade !== undefined ? dto.collegeProfile.naacGrade : undefined,
+          placementEmail: dto.collegeProfile.placementEmail !== undefined ? dto.collegeProfile.placementEmail : undefined,
+          placementPhone: dto.collegeProfile.placementPhone !== undefined ? dto.collegeProfile.placementPhone : undefined,
+          city: dto.collegeProfile.city !== undefined ? dto.collegeProfile.city : undefined,
+          state: dto.collegeProfile.state !== undefined ? dto.collegeProfile.state : undefined,
+          pincode: dto.collegeProfile.pincode !== undefined ? dto.collegeProfile.pincode : undefined,
+          website: dto.collegeProfile.website !== undefined ? dto.collegeProfile.website : undefined,
+          openForPlacement: dto.collegeProfile.openForPlacement !== undefined ? dto.collegeProfile.openForPlacement : undefined
+        }
+      });
+    }
   }
 
   return fetchFullProfile(userId);

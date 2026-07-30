@@ -739,17 +739,15 @@ export const getCollegeAnalytics = async (
     return cached;
   }
 
-  const college = await prisma.collegeProfile.findFirst({
-    where: {
-      adminUserId: collegeAdminId,
-      ...(user.tenantId ? { tenantId: user.tenantId } : {})
-    },
-    select: {
-      id: true,
-      tenantId: true,
-      name: true
-    }
-  });
+  const college =
+    (await prisma.collegeProfile.findFirst({
+      where: { adminUserId: collegeAdminId }
+    })) ||
+    (user.tenantId
+      ? await prisma.collegeProfile.findFirst({
+          where: { tenantId: user.tenantId }
+        })
+      : null);
 
   if (!college) {
     throw new ServiceError("College profile not found.", 404);
@@ -757,7 +755,10 @@ export const getCollegeAnalytics = async (
 
   const students = await prisma.studentProfile.findMany({
     where: {
-      collegeProfileId: college.id
+      OR: [
+        { collegeProfileId: college.id },
+        ...(user.tenantId ? [{ tenantId: user.tenantId }] : [])
+      ]
     },
     select: {
       userId: true,
@@ -773,10 +774,6 @@ export const getCollegeAnalytics = async (
         where: {
           candidateUserId: {
             in: studentUserIds
-          },
-          appliedAt: {
-            gte: dateRange.from,
-            lte: dateRange.to
           }
         },
         include: {

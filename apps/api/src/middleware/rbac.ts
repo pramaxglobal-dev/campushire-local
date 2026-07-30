@@ -37,7 +37,9 @@ export const requireSubRole = (...subRoles: SubRole[]) => {
       return;
     }
 
-    if (subRoles.length > 0 && !subRoles.includes(req.user.subRole)) {
+    const effectiveSubRole = req.user.subRole ?? ("OWNER" as SubRole);
+
+    if (subRoles.length > 0 && !subRoles.includes(effectiveSubRole)) {
       res.status(403).json({
         success: false,
         data: null,

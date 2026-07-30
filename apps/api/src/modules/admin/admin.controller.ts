@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { SubRole, UserRole } from "@campushire/types";
 import { prisma } from "../../lib/prisma";
 import {
   AdminUserFilterSchema,
@@ -9,7 +10,8 @@ import {
   UpdatePlatformSettingSchema,
   UserIdParamSchema,
   BulkApproveStudentsSchema,
-  CohortDashboardFilterSchema
+  CohortDashboardFilterSchema,
+  AddTeamMemberSchema
 } from "./admin.schema";
 import {
   approveUser,
@@ -28,7 +30,12 @@ import {
   updatePlatformSetting,
   bulkApproveStudents,
   getCohortDashboardStats,
-  getCohortDashboardStudents
+  getCohortDashboardStudents,
+  listCollegeTeam,
+  addCollegeTeamMember,
+  removeCollegeTeamMember,
+  deleteTeamMemberPermanently,
+  getStudentDetailsForCollegeAdmin
 } from "./admin.service";
 
 class ControllerError extends Error {
@@ -328,9 +335,18 @@ export const bulkApproveStudentsController = async (
   try {
     const actorId = requireAdminId(req);
     const { userIds } = BulkApproveStudentsSchema.parse(req.body);
+
+    if (req.user?.subRole === SubRole.MEMBER) {
+      throw new ControllerError("Forbidden: Placement Coordinators cannot bulk approve students.", 403);
+    }
     
-    const collegeProfile = await prisma.collegeProfile.findUnique({
-      where: { adminUserId: actorId }
+    const collegeProfile = await prisma.collegeProfile.findFirst({
+      where: {
+        OR: [
+          { adminUserId: actorId },
+          ...(req.user?.tenantId ? [{ tenantId: req.user.tenantId }] : [])
+        ]
+      }
     });
     
     if (!collegeProfile) {
@@ -358,10 +374,16 @@ export const getCohortDashboardController = async (
     const actorId = requireAdminId(req);
     const filters = CohortDashboardFilterSchema.parse(req.query);
 
-    const collegeProfile = await prisma.collegeProfile.findUnique({
-      where: { adminUserId: actorId }
-    });
-    
+    const collegeProfile =
+      (await prisma.collegeProfile.findFirst({
+        where: { adminUserId: actorId }
+      })) ||
+      (req.user?.tenantId
+        ? await prisma.collegeProfile.findFirst({
+            where: { tenantId: req.user.tenantId }
+          })
+        : null);
+
     if (!collegeProfile) {
       throw new ControllerError("College profile not found for this admin", 404);
     }
@@ -376,6 +398,167 @@ export const getCohortDashboardController = async (
         students: students.data
       },
       meta: students.meta,
+      error: null
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listCollegeTeamController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const actorId = requireAdminId(req);
+    if (!req.user?.tenantId) {
+      throw new ControllerError("Forbidden: Tenant context missing", 403);
+    }
+
+    const members = await listCollegeTeam(req.user.tenantId);
+
+    res.status(200).json({
+      success: true,
+      data: members,
+      error: null
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const addCollegeTeamMemberController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const actorId = requireAdminId(req);
+    if (!req.user?.tenantId) {
+      throw new ControllerError("Forbidden: Tenant context missing", 403);
+    }
+
+    // TEMPORARY DEBUG — remove after diagnosing browser 400
+    console.log("[DEBUG addTeamMember] raw req.body:", JSON.stringify(req.body));
+    console.log("[DEBUG addTeamMember] Content-Type:", req.headers["content-type"]);
+
+    const dto = AddTeamMemberSchema.parse(req.body);
+    const member = await addCollegeTeamMember(
+      actorId,
+      req.user.tenantId,
+      req.user.subRole ?? null,
+      dto
+    );
+
+    res.status(201).json({
+      success: true,
+      data: member,
+      error: null
+    });
+  } catch (error) {
+    // TEMPORARY DEBUG — log the error before passing it on
+    console.log("[DEBUG addTeamMember] ERROR:", error instanceof Error ? error.message : JSON.stringify(error));
+    if (error && typeof error === "object" && "issues" in error) {
+      console.log("[DEBUG addTeamMember] ZodError issues:", JSON.stringify((error as any).issues));
+    }
+    next(error);
+  }
+};
+
+export const removeCollegeTeamMemberController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const actorId = requireAdminId(req);
+    if (!req.user?.tenantId) {
+      throw new ControllerError("Forbidden: Tenant context missing", 403);
+    }
+
+    const params = UserIdParamSchema.parse(req.params);
+    const result = await removeCollegeTeamMember(
+      actorId,
+      req.user.tenantId,
+      req.user.subRole ?? null,
+      params.id
+    );
+
+    res.status(200).json({
+      success: true,
+      data: result,
+      error: null
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteTeamMemberPermanentlyController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const actorId = requireAdminId(req);
+    if (!req.user?.tenantId) {
+      throw new ControllerError("Forbidden: Tenant context missing", 403);
+    }
+
+    const params = UserIdParamSchema.parse(req.params);
+    const result = await deleteTeamMemberPermanently(
+      actorId,
+      req.user.tenantId,
+      req.user.subRole ?? null,
+      params.id
+    );
+
+    res.status(200).json({
+      success: true,
+      data: result,
+      error: null
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getStudentDetailsForCollegeAdminController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const actorId = requireAdminId(req);
+    const params = UserIdParamSchema.parse(req.params);
+
+    if (!req.user?.tenantId) {
+      throw new ControllerError("Forbidden: Tenant context missing", 403);
+    }
+
+    const collegeProfile = await prisma.collegeProfile.findFirst({
+      where: {
+        OR: [
+          { adminUserId: actorId },
+          { tenantId: req.user.tenantId }
+        ]
+      }
+    });
+
+    if (!collegeProfile) {
+      throw new ControllerError("College profile not found for this admin", 404);
+    }
+
+    const details = await getStudentDetailsForCollegeAdmin(
+      req.user.tenantId,
+      collegeProfile.id,
+      params.id
+    );
+
+    res.status(200).json({
+      success: true,
+      data: details,
       error: null
     });
   } catch (error) {

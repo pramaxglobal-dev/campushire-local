@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 import { AlertTriangle } from "lucide-react";
-import { Button } from "@/components/ui";
 
 export default function GlobalError({
   error,
@@ -27,7 +26,13 @@ export default function GlobalError({
           We hit an unexpected issue while loading this page. Please try again.
         </p>
         <div className="mt-6">
-          <Button onClick={reset}>Retry</Button>
+          <button
+            type="button"
+            onClick={reset}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-primary-700"
+          >
+            Retry
+          </button>
         </div>
       </div>
     </main>

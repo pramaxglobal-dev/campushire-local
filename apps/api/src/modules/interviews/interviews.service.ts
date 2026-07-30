@@ -15,7 +15,7 @@ import { prisma } from "../../lib/prisma";
 import { logActivity } from "../../lib/activity";
 import { writeApplicationStatusHistory } from "../../lib/application-history";
 import { resolveExistingUserTenantOrNull as getUserTenantId } from "../../lib/tenant";
-import { notifyInterviewScheduled, sendNotification } from "../../lib/notification";
+import { notifyCollegeStaffInterviewScheduled, notifyInterviewScheduled, sendNotification } from "../../lib/notification";
 import type {
   InterviewFilters,
   RescheduleDto,
@@ -199,6 +199,17 @@ export const scheduleInterview = async (
   );
 
   await notifyInterviewScheduled(slot, application, application.job, application.candidate);
+
+  try {
+    const recruiterProfile = await prisma.recruiterProfile.findFirst({
+      where: { userId: recruiterId },
+      select: { companyName: true }
+    });
+    const companyName = recruiterProfile?.companyName || application.job.title || "Company";
+    await notifyCollegeStaffInterviewScheduled(slot, application, application.job, application.candidate, companyName);
+  } catch (err) {
+    // Safe non-blocking try/catch
+  }
 
   await logActivity({
     actorUserId: recruiterId,

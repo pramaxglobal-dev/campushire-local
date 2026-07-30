@@ -23,7 +23,8 @@ import {
   updateCourse,
   updateEnrollmentProgress,
   assignStudentsToCourse,
-  getCourseCompletionStats
+  getCourseCompletionStats,
+  getCollegeAssignedCourses
 } from "./training.service";
 
 class ControllerError extends Error {
@@ -311,6 +312,24 @@ export const getCourseCompletionController = async (
     res.status(200).json({
       success: true,
       data: stats,
+      error: null
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCollegeAssignedCoursesController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const actor = requireUser(req);
+    const result = await getCollegeAssignedCourses(actor.userId);
+    res.status(200).json({
+      success: true,
+      data: result,
       error: null
     });
   } catch (error) {

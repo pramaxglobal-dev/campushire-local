@@ -16,6 +16,7 @@ export const ROUTES = {
     student: "/dashboard/student",
     recruiter: "/dashboard/recruiter",
     college: "/dashboard/college",
+    collegeTeam: "/dashboard/college/team",
     admin: "/dashboard/admin",
     freelance: "/dashboard/freelance",
     vendor: "/dashboard/vendor",
