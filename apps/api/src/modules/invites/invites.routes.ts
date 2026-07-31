@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { UserRole } from "@campushire/types";
+import { SubRole, UserRole } from "@campushire/types";
 import { authenticateJWT } from "../../middleware/auth";
-import { requireRole } from "../../middleware/rbac";
+import { requireRole, requireSubRole } from "../../middleware/rbac";
 import {
   createInviteController,
   deactivateInviteController,
@@ -13,12 +13,34 @@ import {
 
 const router = Router();
 
+// Public — no auth needed
 router.get("/validate/:code", validateInviteCodeController);
 
-router.post("/", authenticateJWT, requireRole(UserRole.COLLEGE_ADMIN), createInviteController);
+// Read-only — all COLLEGE_ADMIN staff can view invite codes and stats
 router.get("/", authenticateJWT, requireRole(UserRole.COLLEGE_ADMIN), listInvitesController);
-router.delete("/permanent/:id", authenticateJWT, requireRole(UserRole.COLLEGE_ADMIN), deleteInvitePermanentController);
-router.delete("/:id", authenticateJWT, requireRole(UserRole.COLLEGE_ADMIN), deactivateInviteController);
 router.get("/stats", authenticateJWT, requireRole(UserRole.COLLEGE_ADMIN), getInviteStatsController);
+
+// Write actions — Coordinators (MEMBER) are blocked; OWNER, ADMIN (TPO), MANAGER (Asst TPO) allowed
+router.post(
+  "/",
+  authenticateJWT,
+  requireRole(UserRole.COLLEGE_ADMIN),
+  requireSubRole(SubRole.OWNER, SubRole.ADMIN, SubRole.MANAGER),
+  createInviteController
+);
+router.delete(
+  "/permanent/:id",
+  authenticateJWT,
+  requireRole(UserRole.COLLEGE_ADMIN),
+  requireSubRole(SubRole.OWNER, SubRole.ADMIN, SubRole.MANAGER),
+  deleteInvitePermanentController
+);
+router.delete(
+  "/:id",
+  authenticateJWT,
+  requireRole(UserRole.COLLEGE_ADMIN),
+  requireSubRole(SubRole.OWNER, SubRole.ADMIN, SubRole.MANAGER),
+  deactivateInviteController
+);
 
 export { router as inviteRoutes };

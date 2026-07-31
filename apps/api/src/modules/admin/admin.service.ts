@@ -1014,6 +1014,7 @@ export interface CollegeTeamMemberItem {
   isActive: boolean;
   isApproved: boolean;
   createdAt: Date | string;
+  lastLoginAt: Date | string | null;
   temporaryPassword?: string;
 }
 
@@ -1044,7 +1045,8 @@ export const listCollegeTeam = async (
       subRole: true,
       isActive: true,
       isApproved: true,
-      createdAt: true
+      createdAt: true,
+      lastLoginAt: true
     },
     orderBy: {
       createdAt: "desc"

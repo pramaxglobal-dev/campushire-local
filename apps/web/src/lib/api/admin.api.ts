@@ -194,6 +194,7 @@ export interface CollegeTeamMember {
   isActive: boolean;
   isApproved: boolean;
   createdAt: string;
+  lastLoginAt: string | null;
   temporaryPassword?: string;
 }
 
